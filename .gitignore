@@ -1,0 +1,40 @@
+# Python build/cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+.tox/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated outputs (these can be large; example/benchmark scripts produce them)
+examples/sq3d_*.npz
+examples/sqw_*.npz
+examples/delta_pdf_*.npz
+examples/sqw_BZ_*.npz
+examples/*.png
+benchmarks/benchmark_*_results.npz
+
+# But always keep figures used by README:
+!docs/figures/*.png

@@ -1,0 +1,43 @@
+# Changelog
+
+## 0.1.0 — 2026-05-07
+
+Initial public release.
+
+### Features
+
+* **Sq3D**: GPU 3D static partial S(q) on a `192 x 192 x 97` q-grid via
+  density binning (cloud-in-cell) + 3D rFFT. All 97 unique L-planes from
+  one calculation, **1.7 min on a GTX 1070 for 5001 frames**.
+* **Sqw**: GPU dynamic structure factor S(q, ω) on any user q-set, via
+  direct atomic Fourier amplitude + cuFFT batched 1D time-FFT. **20 min
+  for the full HK1.5 plane on a GTX 1070**, vs ~5 h on single-CPU dynasor
+  v2.
+* **compute_delta_pdf**: 3D delta-PDF (partial diffuse Patterson) per
+  X-ray partial via inverse 3D rFFT. **< 5 s** total; the heavy lifting
+  was done by Sq3D.
+* **DispersionProjection**: project a BZ-folded `S(q, ω)` cube onto
+  cubic high-symmetry paths Γ-X-M-R-Γ.
+* X-ray Cromer-Mann form factors for 22 elements; neutron coherent
+  scattering lengths for the same.
+* Trajectory readers: NpzTrajectory (Baldwin et al. format),
+  SingleNpzTrajectory, plus a BaseTrajectory abstraction for custom
+  formats.
+
+### Examples
+
+* `01_static_sq3d.py` — full 3D S(q) cube on CsPbI3 600 K.
+* `02_delta_pdf.py` — 3D ΔPDF from the same cube.
+* `03_dynamic_sqw_HK_plane.py` — S(q, ω) on HK1.5.
+* `04_dynamic_sqw_BZ.py` — S(q, ω) on the full first BZ.
+* `05_dispersion_paths.py` — Γ-X-M-R-Γ phonon-dispersion projection.
+
+### Benchmarks
+
+* `benchmark_sq3d.py` — 3D static S(q) GPU vs CPU.
+* `benchmark_sqw.py` — Dynamic S(q, ω) GPU vs CPU.
+
+### Tests
+
+* 15 unit tests covering form factors, q-grid construction, and
+  dispersion path projection.

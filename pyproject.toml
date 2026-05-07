@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gpuscatter"
+version = "0.1.0"
+description = "GPU-accelerated diffuse scattering, S(q,omega), and 3D-DeltaPDF from MD trajectories"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+authors = [
+    { name = "Milos Dubajic", email = "md942@cam.ac.uk" },
+]
+keywords = [
+    "scattering", "diffuse-scattering", "molecular-dynamics",
+    "structure-factor", "phonon-dispersion", "delta-pdf",
+    "perovskite", "x-ray", "gpu", "cupy",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+    "numpy>=1.21",
+    "matplotlib>=3.4",
+]
+
+[project.optional-dependencies]
+gpu-cuda12 = ["cupy-cuda12x>=12.0"]
+gpu-cuda11 = ["cupy-cuda11x>=11.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+]
+
+[project.urls]
+Homepage = "https://github.com/dubajicmilos/gpuscatter"
+Documentation = "https://github.com/dubajicmilos/gpuscatter#readme"
+Issues = "https://github.com/dubajicmilos/gpuscatter/issues"
+
+[tool.setuptools]
+packages = ["gpuscatter"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501"]
