@@ -27,7 +27,7 @@ import time
 from typing import Sequence
 import numpy as np
 
-from .form_factors import f_xray
+from .form_factors import f_xray, f_neutron
 from .trajectory import BaseTrajectory, unwrap_positions
 
 
@@ -222,6 +222,10 @@ class Sqw:
         q_norm = np.linalg.norm(cfg.q_vecs, axis=1).astype(np.float64)
         if cfg.weighting == 'xray':
             f_q = {sp: f_xray(q_norm, sp).astype(np.float32)
+                   for sp in self.species}
+        elif cfg.weighting == 'neutron':
+            # b is q-independent (point nuclear scattering)
+            f_q = {sp: np.full(n_q, f_neutron(sp), dtype=np.float32)
                    for sp in self.species}
         elif cfg.weighting == 'unit':
             f_q = {sp: np.ones(n_q, dtype=np.float32) for sp in self.species}
