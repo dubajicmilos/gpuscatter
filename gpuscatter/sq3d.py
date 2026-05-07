@@ -33,7 +33,7 @@ import time
 from typing import Sequence
 import numpy as np
 
-from .form_factors import f_xray
+from .form_factors import f_xray, f_neutron
 from .trajectory import BaseTrajectory
 
 
@@ -47,7 +47,7 @@ class Sq3DConfig:
     sub_regions: int = 1                            # 1 = full box (no averaging)
     sub_region_cells: int | None = None             # cells per sub-region side
     rng_seed: int = 7
-    weighting: str = 'xray'                         # 'xray' or 'unit'
+    weighting: str = 'xray'                         # 'xray', 'neutron', or 'unit'
 
     @property
     def n_total(self) -> int:
@@ -346,6 +346,15 @@ class Sq3D:
                 for sp in self.species
             }
             del q_mag, q_mag_cpu
+        elif cfg.weighting == 'neutron':
+            # Coherent neutron scattering length b is q-independent (point
+            # nuclear scattering). Use a constant grid of b in fm per species.
+            f_per = {
+                sp: cp.asarray(
+                    np.full(shape_q, f_neutron(sp), dtype=np.float32)
+                )
+                for sp in self.species
+            }
         elif cfg.weighting == 'unit':
             f_per = {sp: cp.asarray(
                 np.ones(shape_q, dtype=np.float32))

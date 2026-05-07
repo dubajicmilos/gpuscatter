@@ -36,6 +36,33 @@ def test_f_neutron_returns_float():
     assert isinstance(f_neutron('Pb'), float)
 
 
+def test_f_neutron_known_values():
+    """Spot-check a few neutron lengths against the NIST reference table.
+
+    Negative b for H is a key feature exploited by isotope substitution
+    (H<->D contrast).
+    """
+    # https://www.ncnr.nist.gov/resources/n-lengths/
+    expected_fm = {
+        'H': -3.7406,
+        'D':  6.671,
+        'C':  6.6460,
+        'N':  9.36,
+        'Pb': 9.405,
+        'Cs': 5.42,
+    }
+    for sp, b_expected in expected_fm.items():
+        assert abs(f_neutron(sp) - b_expected) < 0.01, (
+            f'{sp}: f_neutron = {f_neutron(sp)} vs expected {b_expected}'
+        )
+
+
+def test_f_neutron_unknown_species_raises():
+    import pytest
+    with pytest.raises(KeyError):
+        f_neutron('Xx')
+
+
 def test_f_xray_shape_preserved():
     q = np.random.rand(7, 5).astype(np.float32)
     f = f_xray(q, 'Pb')
