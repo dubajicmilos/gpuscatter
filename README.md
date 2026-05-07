@@ -71,6 +71,12 @@ sq = Sq3D(traj, Sq3DConfig(n_cells=24, n_voxels_per_cell=8,
                             sub_regions=8, sub_region_cells=8)).run()
 sq.save('sq3d_600K.npz')
 
+# Same with neutron weighting (b is q-independent, NIST table built in)
+sq_n = Sq3D(traj, Sq3DConfig(n_cells=24, n_voxels_per_cell=8,
+                              sub_regions=8, sub_region_cells=8,
+                              weighting='neutron')).run()
+sq_n.save('sq3d_600K_neutron.npz')
+
 # 2) 3D delta-PDF per partial (< 5 s)
 pdf = compute_delta_pdf(sq)
 pdf.save('delta_pdf_600K.npz')
