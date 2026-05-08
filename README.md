@@ -195,23 +195,6 @@ correlations along ⟨111⟩ that produce the cubic flower in q-space.
 
 ![3D dual-isosurface, positive and negative ΔPDF](docs/figures/delta_pdf_isosurfaces.png)
 
-NN-peak amplitude decay along the appropriate axis for each partial
-gives a finite **correlation length ξ** for each channel:
-
-![NN-peak amplitude decay, exponential fits per channel](docs/figures/delta_pdf_correlation_length.png)
-
-| Channel | Sampling axis | ξ (Å) | ξ / a |
-|---|---|---:|---:|
-| Pb-Pb | (1, 0, 0), peaks at n·a | 9.97 | 1.61 |
-| I-I | (1, 0, 0), face-I | **15.17** | **2.45** |
-| Pb-I | (0, 0, 1) | 8.04 | 1.30 |
-| Pb-Cs (cubic flower) | (1, 1, 1), peaks at (n+½)·a√3 | **10.33** | **1.67** |
-| I-Cs | (1, 1, 0) | 7.90 | 1.28 |
-
-The **Cs-Pb cubic flower has ξ ≈ 10 Å ≈ 1.7 cells** — finite, set by
-the dispersion of the responsible phonons. The **I-I channel has the
-longest ξ ≈ 15 Å (2.5 cells)**, the soft-tilt-mode contribution
-growing toward the cubic→tetragonal transition.
 
 ### Dynamic S(q, ω): the soft-tilt mode and energy decomposition
 
