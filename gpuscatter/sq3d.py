@@ -145,6 +145,81 @@ class Sq3DResult:
         """
         return 0.85 * self.n_voxels_per_cell / 2
 
+    def trim(self, q_max: float | None = None) -> 'Sq3DResult':
+        """Return a copy with the q-grid trimmed to ``|q| <= q_max``.
+
+        Drops the outer ~15 % of the FFT q-grid where aliasing and the
+        ``1/sinc^4`` CIC kernel deconvolution produce a bright artifact
+        band. See the class-level note in :class:`Sq3D` for the full
+        explanation of the q_Nyquist edge artifact.
+
+        Parameters
+        ----------
+        q_max : float, optional
+            Maximum ``|H|, |K|, L`` (in r.l.u.) to keep. Defaults to
+            :attr:`q_max_clean` (= ``0.85 * n_voxels_per_cell / 2``).
+            Must satisfy ``0 < q_max <= n_voxels_per_cell / 2``.
+
+        Returns
+        -------
+        Sq3DResult
+            A new result with ``h_arr``, ``k_arr``, ``L_arr``,
+            ``partials``, and ``total`` restricted to the chosen range.
+            All metadata fields (``a_cub``, ``L_box``, ``n_frames``,
+            ``n_cells``, ``n_voxels_per_cell``, ``n_regions``,
+            ``method``, ``elapsed_s``, ``region_origins``) are preserved
+            so ``q_max_clean`` still reflects the original grid.
+
+        Examples
+        --------
+        >>> result = Sq3D(traj, cfg).run()
+        >>> clean = result.trim()                # default = q_max_clean
+        >>> clean.save('sq3d_clean.npz')
+        >>> custom = result.trim(q_max=3.5)      # tighter cut
+        """
+        if q_max is None:
+            q_max = self.q_max_clean
+        q_nyq = self.n_voxels_per_cell / 2
+        if not (0.0 < q_max <= q_nyq):
+            raise ValueError(
+                f'q_max must be in (0, q_Nyquist={q_nyq}]; got {q_max}.'
+            )
+
+        # H and K axes: keep |q| <= q_max (a small +eps for floating-point safety)
+        eps = 1e-6
+        hk_mask = np.abs(self.h_arr) <= q_max + eps
+        L_mask = self.L_arr <= q_max + eps
+
+        h_kept = self.h_arr[hk_mask]
+        k_kept = self.k_arr[hk_mask] if self.k_arr is not None else h_kept
+        L_kept = self.L_arr[L_mask]
+
+        idx_h = np.where(hk_mask)[0]
+        idx_k = np.where(hk_mask)[0]
+        idx_L = np.where(L_mask)[0]
+
+        def _slice_3d(arr):
+            if arr is None:
+                return None
+            return arr[np.ix_(idx_h, idx_k, idx_L)]
+
+        new_total = _slice_3d(self.total)
+        new_partials = {key: _slice_3d(S) for key, S in self.partials.items()}
+
+        return Sq3DResult(
+            h_arr=h_kept, k_arr=k_kept, L_arr=L_kept,
+            a_cub=self.a_cub, L_box=self.L_box,
+            n_frames=self.n_frames,
+            n_cells=self.n_cells,
+            n_voxels_per_cell=self.n_voxels_per_cell,
+            n_regions=self.n_regions,
+            method=self.method + f' [trimmed to |q|<={q_max:.3f} r.l.u.]',
+            partials=new_partials,
+            total=new_total,
+            elapsed_s=self.elapsed_s,
+            region_origins=self.region_origins,
+        )
+
     def save(self, path: str | Path):
         """Save to NPZ. Partials become ``S_{a}{b}`` keys."""
         out = {
@@ -196,8 +271,9 @@ class Sq3D:
     >>> cfg = Sq3DConfig(n_cells=24, n_voxels_per_cell=10, sub_regions=8,
     ...                  sub_region_cells=8)
     >>> result = Sq3D(traj, cfg).run()
-    >>> # Trust signal up to result.q_max_clean (here ~ 4.25 r.l.u.)
-    >>> result.save('sq3d_600K.npz')
+    >>> # Drop the contaminated outer band before analysis / saving:
+    >>> clean = result.trim()                       # |q| <= q_max_clean
+    >>> clean.save('sq3d_600K_clean.npz')
     """
 
     def __init__(self, trajectory: BaseTrajectory, config: Sq3DConfig):
@@ -288,7 +364,8 @@ class Sq3D:
                   f'q_max = {q_nyq:.2f} r.l.u.')
             print(f'[gpuscatter.Sq3D] q_max_clean = {0.85 * q_nyq:.2f} r.l.u. '
                   f'(trust signal only below this -- outer ~15 % suffers from '
-                  f'q_Nyquist aliasing + CIC deconv overshoot)')
+                  f'q_Nyquist aliasing + CIC deconv overshoot; '
+                  f'call result.trim() to drop it)')
             print(f'[gpuscatter.Sq3D] species = {self.species}')
             print(f'[gpuscatter.Sq3D] sub-regions = {cfg.sub_regions}')
 
