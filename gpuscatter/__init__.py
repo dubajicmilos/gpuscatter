@@ -16,7 +16,7 @@ See ``examples/`` for runnable scripts using the CsPbI3 600 K demo data.
 from .form_factors import f_xray, f_neutron, CROMER_MANN, B_NEUTRON
 from .trajectory import (
     BaseTrajectory, NpzTrajectory, SingleNpzTrajectory,
-    unwrap_positions, ATOMIC_NUMBER_TO_SYMBOL,
+    unwrap_positions, ATOMIC_NUMBER_TO_SYMBOL, LammpsDumpTrajectory
 )
 from .sq3d import Sq3D, Sq3DConfig, Sq3DResult
 from .sqw import (
