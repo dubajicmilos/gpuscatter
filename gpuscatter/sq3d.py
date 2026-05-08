@@ -39,7 +39,33 @@ from .trajectory import BaseTrajectory
 
 @dataclass
 class Sq3DConfig:
-    """Configuration for :class:`Sq3D`."""
+    """Configuration for :class:`Sq3D`.
+
+    Parameters
+    ----------
+    n_cells : int
+        Supercell size (per dimension).
+    n_voxels_per_cell : int, default 8
+        Binning resolution per cubic unit cell, per axis. Sets
+        ``q_Nyquist = n_voxels_per_cell / 2 r.l.u.`` -- the outer ~15 % of
+        the q-grid (``|q| > 0.85 * q_Nyquist``) is contaminated by aliasing
+        and CIC kernel deconvolution overshoot. Choose
+        ``n_voxels_per_cell >= 2.4 * q_max`` for the highest q you actually
+        need, and trim the displayed range to ``|q| <= q_max``. See the
+        ``q_max_clean`` attribute on :class:`Sq3DResult`.
+    species : sequence of str, optional
+        Species to include. Defaults to all unique species in the trajectory.
+    cross_pairs : sequence of (str, str), optional
+        Cross-partial pairs to compute. Defaults to all (a, b) with a < b.
+    sub_regions : int, default 1
+        Number of sub-region partitions for ripple suppression. 1 = full box.
+    sub_region_cells : int, optional
+        Cells per sub-region side. Required if ``sub_regions > 1``.
+    rng_seed : int, default 7
+        Seed for sub-region origin sampling.
+    weighting : {'xray', 'neutron', 'unit'}, default 'xray'
+        Form-factor weighting.
+    """
     n_cells: int                                    # supercell size (per dim)
     n_voxels_per_cell: int = 8                      # binning resolution
     species: Sequence[str] | None = None            # default: discover from traj
@@ -106,6 +132,19 @@ class Sq3DResult:
     elapsed_s: float = 0.0
     region_origins: np.ndarray | None = None
 
+    @property
+    def q_max_clean(self) -> float:
+        """Recommended upper q (in r.l.u.) for trusted signal.
+
+        The 3D-FFT pipeline has a Nyquist boundary at
+        ``q_Nyquist = n_voxels_per_cell / 2 r.l.u.`` per axis. The outer
+        ~15 % of the grid is contaminated by CIC aliasing and the
+        ``1/sinc^4`` deconvolution overshoot. This returns
+        ``0.85 * q_Nyquist`` as a safe upper bound; trim the displayed
+        ``H, K, L`` range to ``[-q_max_clean, q_max_clean]`` for analysis.
+        """
+        return 0.85 * self.n_voxels_per_cell / 2
+
     def save(self, path: str | Path):
         """Save to NPZ. Partials become ``S_{a}{b}`` keys."""
         out = {
@@ -137,12 +176,27 @@ class Sq3D:
         :class:`Sq3DConfig` controlling the q-grid, species, sub-region
         averaging, and weighting.
 
+    Notes
+    -----
+    **q_Nyquist edge artifact.** The outer ~15 % of the returned q-grid
+    (``|q| > 0.85 * n_voxels_per_cell / 2`` r.l.u.) is contaminated by
+    aliasing of high-q signal across the voxel-grid Nyquist frequency,
+    amplified by the CIC kernel deconvolution that boosts by up to 226x at
+    the cube corner. This is a fundamental property of any density-binning
+    + FFT pipeline and is not specific to this implementation. **Choose
+    ``n_voxels_per_cell >= 2.4 * q_max``** for the highest q you actually
+    use, and trim the displayed range. The returned :class:`Sq3DResult`
+    exposes a ``q_max_clean`` property as a guide. The 2D Butler-Welberry
+    direct-sum partials computed via :class:`gpuscatter.Sqw` on a fixed
+    ``L`` plane do not have this artifact.
+
     Examples
     --------
     >>> traj = NpzTrajectory(Path('600K').glob('nptraj*.npz'))
-    >>> cfg = Sq3DConfig(n_cells=24, n_voxels_per_cell=8, sub_regions=8,
+    >>> cfg = Sq3DConfig(n_cells=24, n_voxels_per_cell=10, sub_regions=8,
     ...                  sub_region_cells=8)
     >>> result = Sq3D(traj, cfg).run()
+    >>> # Trust signal up to result.q_max_clean (here ~ 4.25 r.l.u.)
     >>> result.save('sq3d_600K.npz')
     """
 
@@ -229,8 +283,12 @@ class Sq3D:
             print(f'[gpuscatter.Sq3D] device: {dev}')
             print(f'[gpuscatter.Sq3D] L_box = {traj.L_box:.3f} A, '
                   f'a_cub = {a_cub:.3f} A')
+            q_nyq = N // 2 / cfg.n_cells
             print(f'[gpuscatter.Sq3D] grid {N}^3, dq = 1/{cfg.n_cells} r.l.u., '
-                  f'q_max = {N // 2 / cfg.n_cells:.2f} r.l.u.')
+                  f'q_max = {q_nyq:.2f} r.l.u.')
+            print(f'[gpuscatter.Sq3D] q_max_clean = {0.85 * q_nyq:.2f} r.l.u. '
+                  f'(trust signal only below this -- outer ~15 % suffers from '
+                  f'q_Nyquist aliasing + CIC deconv overshoot)')
             print(f'[gpuscatter.Sq3D] species = {self.species}')
             print(f'[gpuscatter.Sq3D] sub-regions = {cfg.sub_regions}')
 
