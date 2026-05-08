@@ -17,12 +17,20 @@
 
 * `Sq3DResult.q_max_clean` property — recommended upper q (in r.l.u.)
   for trusted signal, set to `0.85 * n_voxels_per_cell / 2`.
-* `Sq3D.run` verbose output now prints `q_max_clean` alongside `q_max`.
+* `Sq3DResult.trim(q_max=None)` method — return a copy with `h_arr`,
+  `k_arr`, `L_arr`, `partials`, and `total` restricted to
+  `|q| <= q_max` (default = `q_max_clean`). Drops the contaminated
+  outer band so downstream code that does not check `q_max_clean` is
+  also protected.
+* `Sq3D.run` verbose output now prints `q_max_clean` and points users
+  at `result.trim()`.
 
 ### Tests
 
-* New `tests/test_sq3d_config.py` (5 tests) covering the new property
-  and the `n_total` field, no GPU required.
+* `tests/test_sq3d_config.py` covers the new property, the `n_total`
+  field, and 9 cases for `trim()` (default vs custom q_max, value
+  preservation, shape consistency, metadata propagation, error paths,
+  idempotence). No GPU required.
 
 ## 0.1.0 — 2026-05-07
 
