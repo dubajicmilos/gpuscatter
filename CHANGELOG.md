@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Documentation
+
+* **q_Nyquist edge artifact** documented in the `Sq3D` and `Sq3DConfig`
+  docstrings and in a new "Caveat" subsection of the README. The outer
+  ~15 % of the FFT q-grid (`|q| > 0.85 * n_voxels_per_cell / 2 r.l.u.`)
+  is contaminated by aliasing across `q_Nyquist` and the `1/sinc^4` CIC
+  deconvolution overshoot. This is a property of every density-binning
+  + FFT pipeline; users should pick `n_voxels_per_cell >= 2.4 * q_max`
+  for the highest q they need and trim the displayed range. The 2D
+  Butler-Welberry direct-sum partials do not have this artifact.
+
+### Features
+
+* `Sq3DResult.q_max_clean` property — recommended upper q (in r.l.u.)
+  for trusted signal, set to `0.85 * n_voxels_per_cell / 2`.
+* `Sq3D.run` verbose output now prints `q_max_clean` alongside `q_max`.
+
+### Tests
+
+* New `tests/test_sq3d_config.py` (5 tests) covering the new property
+  and the `n_total` field, no GPU required.
+
 ## 0.1.0 — 2026-05-07
 
 Initial public release.

@@ -67,6 +67,8 @@ traj = NpzTrajectory(files)              # 5001 frames, 69 120 atoms
 a_cub = traj.L_box / 24
 
 # 1) Full 3D static S(q) cube (1.7 min on GTX 1070, all L-planes at once)
+# n_voxels_per_cell=8 -> q_Nyq = 4 r.l.u.; trust signal up to
+# sq.q_max_clean ~ 3.4 r.l.u. -- see "q_Nyquist edge artifact" below.
 sq = Sq3D(traj, Sq3DConfig(n_cells=24, n_voxels_per_cell=8,
                             sub_regions=8, sub_region_cells=8)).run()
 sq.save('sq3d_600K.npz')
@@ -138,6 +140,33 @@ on the same q-grid simultaneously.
 For comparison, computing the same eight L-planes via direct atomic
 Fourier sum (numba JIT, single L plane at a time) on the same hardware
 would take ~3 h. Computing the full 97-plane cube would take ~34 h.
+
+#### Caveat — q_Nyquist edge artifact
+
+Any density-binning + FFT pipeline produces a **bright band on the outer
+~10–15 % of the q-grid**, at the voxel-grid Nyquist frequency
+`q_Nyq = n_voxels_per_cell / 2 r.l.u.` per axis. Three causes compound
+there: (i) high-q signal aliases across `q_Nyq`; (ii) the `1/sinc⁴` CIC
+kernel correction boosts by 6× per axis at the boundary, 226× at the
+cube corner — exactly where the aliased contamination lives; (iii) form
+factor + bare diffuse are still substantial up there.
+
+**Recommended use**:
+
+* Pick `n_voxels_per_cell ≥ 2.4 · q_max` for the highest q you actually
+  want to analyse. For `q_max = 4 r.l.u.` (typical halide perovskite),
+  set `n_voxels_per_cell = 10`. For `q_max = 5 r.l.u.`, use 12.
+* **Trim the displayed range** to `|q| ≤ q_max`. The returned
+  `Sq3DResult` exposes `result.q_max_clean = 0.85 · q_Nyq` as a default
+  safe upper bound.
+* The 2D Butler–Welberry direct sum on a fixed `(H, K, L)` plane does
+  *not* have this artifact, since it evaluates the FT exactly at user
+  q-points without binning or deconvolution. Use it when you need a
+  clean image of one specific plane up to high q.
+
+This is a property of every FFT-based S(q) tool, not specific to
+gpuscatter — `dynasor` and `PSF` direct-sum implementations side-step
+it by computing only one plane at a time.
 
 ### 3D ΔPDF: real-space partial diffuse Patterson
 
