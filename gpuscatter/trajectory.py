@@ -146,6 +146,176 @@ class SingleNpzTrajectory(BaseTrajectory):
         for i, p in enumerate(self._positions):
             yield i, p
 
+class LammpsDumpTrajectory(BaseTrajectory):
+    """Reader for LAMMPS custom dump files with 'element x y z' columns.
+
+    Expects dump sections in the format::
+
+        ITEM: TIMESTEP
+        <step>
+        ITEM: NUMBER OF ATOMS
+        <n>
+        ITEM: BOX BOUNDS [xy xz yz] pp pp pp
+        <xlo_bound> <xhi_bound> [<xy>]
+        <ylo_bound> <yhi_bound> [<xz>]
+        <zlo_bound> <zhi_bound> [<yz>]
+        ITEM: ATOMS id element x y z
+        <id> <el> <x> <y> <z>
+        ...
+
+    Orthogonal and triclinic (xy xz yz) boxes are both supported.
+    ``L_box`` is set to the x-span of the first frame (``xhi - xlo``),
+    consistent with the cubic assumption used by ``NpzTrajectory``.
+    Positions are stored in angstroms and assumed to be unwrapped
+    (or wrapped — ``ref_positions`` is taken from frame 0).
+
+    Parameters
+    ----------
+    file_path
+        Path to a single LAMMPS dump file (may contain multiple timesteps).
+    """
+
+    TILT_WARN  = 0.05  # scalar L_box approximation becoming inaccurate
+    TILT_ERROR = 0.5   # LAMMPS minimum-image convention broken
+
+    def __init__(self, file_path: Path):
+        self.file_path = Path(file_path)
+        self._frames: list[np.ndarray] = []
+        self._parse()
+
+    def _check_tilt(self, row0: list[str], row1: list[str], row2: list[str]):
+        """Warn or raise if triclinic tilt factors are too large.
+
+        Tilt ratios are normalised to box length (e.g. |xy| / lx).
+        Ratios above TILT_WARN indicate the scalar L_box PBC unwrapping
+        is becoming inaccurate. Ratios above TILT_ERROR mean the LAMMPS
+        minimum-image convention itself is violated and the trajectory is
+        likely corrupt.
+        """
+        xlo, xhi = float(row0[0]), float(row0[1])
+        ylo, yhi = float(row1[0]), float(row1[1])
+        zlo, zhi = float(row2[0]), float(row2[1])
+
+        if len(row0) < 3:
+            return  # orthogonal box, nothing to check
+
+        xy = float(row0[2])
+        xz = float(row1[2])
+        yz = float(row2[2])
+
+        lx = xhi - xlo
+        ly = yhi - ylo
+        lz = zhi - zlo
+
+        checks = [
+            (abs(xy), lx, 'xy', 'lx'),
+            (abs(xz), lx, 'xz', 'lx'),
+            (abs(yz), ly, 'yz', 'ly'),
+        ]
+
+        violations_warn  = []
+        violations_error = []
+
+        for tilt, box_len, tilt_name, box_name in checks:
+            ratio = tilt / box_len
+            if ratio > self.TILT_ERROR:
+                violations_error.append(
+                    f'{tilt_name}/{box_name}={ratio:.3f} > {self.TILT_ERROR}'
+                )
+            elif ratio > self.TILT_WARN:
+                violations_warn.append(
+                    f'{tilt_name}/{box_name}={ratio:.3f} > {self.TILT_WARN}'
+                )
+
+        if violations_error:
+            raise ValueError(
+                f'Triclinic tilt factors exceed {self.TILT_ERROR} — LAMMPS '
+                f'minimum-image convention is violated, trajectory is likely '
+                f'corrupt.\n'
+                f'Violations: {", ".join(violations_error)}'
+            )
+        if violations_warn:
+            warnings.warn(
+                f'Triclinic tilt factors exceed {self.TILT_WARN} of box '
+                f'length — scalar L_box PBC unwrapping may be inaccurate.\n'
+                f'Violations: {", ".join(violations_warn)}\n'
+                f'Subclass BaseTrajectory with full 3×3 cell support to fix '
+                f'this.',
+                UserWarning,
+                stacklevel=3,
+            )
+
+    def _parse(self):
+        frames = []
+        species_set = False
+        n_atoms = 0
+
+        with open(self.file_path) as f:
+            lines = f.readlines()
+
+        i = 0
+        while i < len(lines):
+            line = lines[i].strip()
+
+            if line == 'ITEM: TIMESTEP':
+                i += 2  # skip timestep value
+
+            elif line == 'ITEM: NUMBER OF ATOMS':
+                n_atoms = int(lines[i + 1].strip())
+                i += 2
+
+            elif line.startswith('ITEM: BOX BOUNDS'):
+                is_triclinic = 'xy' in line
+                row0 = lines[i + 1].split()
+                row1 = lines[i + 2].split()
+                row2 = lines[i + 3].split()
+
+                xlo, xhi = float(row0[0]), float(row0[1])
+                if not hasattr(self, 'L_box'):
+                    self.L_box = xhi - xlo
+                    if is_triclinic:
+                        self._check_tilt(row0, row1, row2)
+                i += 4
+
+            elif line.startswith('ITEM: ATOMS'):
+                cols   = line.split()[2:]
+                el_col = cols.index('element')
+                x_col  = cols.index('x')
+                y_col  = cols.index('y')
+                z_col  = cols.index('z')
+                i += 1
+
+                atom_lines = lines[i: i + n_atoms]
+                positions = np.empty((n_atoms, 3), dtype=np.float32)
+                if not species_set:
+                    species = []
+
+                for j, al in enumerate(atom_lines):
+                    tok = al.split()
+                    positions[j, 0] = float(tok[x_col])
+                    positions[j, 1] = float(tok[y_col])
+                    positions[j, 2] = float(tok[z_col])
+                    if not species_set:
+                        species.append(tok[el_col])
+
+                if not species_set:
+                    self.species = np.array(species)
+                    species_set = True
+
+                frames.append(positions)
+                i += n_atoms
+
+            else:
+                i += 1
+
+        self._frames = frames
+        self.n_frames = len(frames)
+        self.ref_positions = self._frames[0].copy()
+
+    def iter_frames(self) -> Iterator[tuple[int, np.ndarray]]:
+        for i, pos in enumerate(self._frames):
+            yield i, pos
+
 
 def unwrap_positions(positions: np.ndarray, ref: np.ndarray,
                      L_box: float) -> np.ndarray:
