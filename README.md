@@ -69,6 +69,10 @@ a_cub = traj.L_box / 24
 # 1) Full 3D static S(q) cube (1.7 min on GTX 1070, all L-planes at once)
 # n_voxels_per_cell=8 -> q_Nyq = 4 r.l.u.; trust signal up to
 # sq.q_max_clean ~ 3.4 r.l.u. -- see "q_Nyquist edge artifact" below.
+# sub_regions=8, sub_region_cells=8 averages 8 random 8^3-cell sub-cubes
+# of the 24^3 box to suppress long-vector finite-size Fourier ripples;
+# pass sub_regions=1 (and drop sub_region_cells) for a single full-box
+# compute that is faster but ripplier.
 sq = Sq3D(traj, Sq3DConfig(n_cells=24, n_voxels_per_cell=8,
                             sub_regions=8, sub_region_cells=8)).run()
 sq.save('sq3d_600K.npz')
