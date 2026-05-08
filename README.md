@@ -103,12 +103,17 @@ For runnable end-to-end scripts see [`examples/`](examples/).
 
 ## Demo: CsPbI₃ at 600 K
 
-The headline demo uses 5001 frames (1 ns at 200 fs spacing) of CsPbI₃
-600 K from the [Baldwin et al. (2024)](https://arxiv.org/abs/2410.20177)
-ACE-MLIP trajectory. CsPbI₃ at 600 K is in the cubic phase, 67 K above
-the cubic→tetragonal transition at T_c ≈ 533 K, so its diffuse-scattering
-landscape contains all the characteristic features of a halide perovskite
-near a tilt-driven structural transition:
+The headline demo uses **5001 frames** (1 ns total at 200 fs frame
+spacing) of a **24 × 24 × 24 cubic supercell** of **CsPbI₃ at 600 K** —
+69 120 atoms, lattice constant a = 6.19 Å, cubic edge L = 148.5 Å —
+from the [Baldwin et al. (2024)](https://arxiv.org/abs/2410.20177)
+ACE-MLIP trajectory. The 24-cell side fixes the q-resolution at
+1/24 r.l.u. (~0.042 Å⁻¹) on every output, and the 1 ns total time gives
+~4 µeV energy resolution on S(q, ω). CsPbI₃ at 600 K is in the cubic
+phase, 67 K above the cubic→tetragonal transition at T_c ≈ 533 K, so
+its diffuse-scattering landscape contains all the characteristic
+features of a halide perovskite near a tilt-driven structural
+transition:
 
 * a soft tilt mode at the **R-point** producing rod-like X–X scattering
   at half-integer L,
