@@ -125,13 +125,9 @@ total) are produced in the same compute.
 
 ![3D partial S(q) orthoslices, 6 partials × 3 cuts](docs/figures/sq3d_partials_orthoslices.png)
 
-Eight L-planes from the same single 1.7-min compute (no recomputation):
+Eight L-planes from the same single 1.7-min compute:
 
 ![Eight L-planes from one compute](docs/figures/sq3d_L_plane_gallery.png)
-
-The 4mm Cs-Pb **cubic flower** at half-integer L, the **R-rod cross**
-at half-integer Q, and the integer-Q Bragg residuals are all visible
-on the same q-grid simultaneously.
 
 3D isosurface rendering of the partial S(q) cube:
 
@@ -226,12 +222,6 @@ Same decomposition for the Cs-Pb cubic-flower partial:
 
 ![10 × 1-meV bin decomposition, Cs-Pb](docs/figures/sqw_1meV_windows_CsPb.png)
 
-The Cs-Pb cubic flower **persists across all 10 energy bins from 0 to
-10 meV** with a smoothly decreasing amplitude — a clean kinematic
-acoustic-elastic feature, not a sharp soft-mode resonance. The R-rod
-cross visible in the total-channel `0–1 meV` bin is gone by `1–2 meV`,
-showing the soft tilt mode is fully overdamped at 600 K.
-
 ### Phonon dispersion along Γ–X–M–R–Γ
 
 The full first-BZ S(q, ω) computation (24³ q × 2501 ω-bins, 11 min on
@@ -240,21 +230,10 @@ GTX 1070) feeds the `DispersionProjection` module, which extracts
 
 ![BZ-folded dispersion, 7 partials + total, signed colormap](docs/figures/bz_dispersion_signed.png)
 
-Cross-channel partials are shown on a signed (red = +, blue = −)
-colormap so the sign structure is visible — the Pb-Cs cross is
-strongly **negative along M-R at low E** (kinematic phase factor
-`cos(π(H+K+L))` = −1 at M, fading at R) and positive along Γ-X.
-Auto-channel partials use an inferno log scale.
-
 Cs-Pb dispersion within the HK1.5 plane (48-path symmetry-averaged
 along X-M, M-R, X-R):
 
 ![Cs-Pb dispersion paths within HK1.5](docs/figures/sqw_dispersion_paths.png)
-
-The acoustic branch softens from ~3 meV at M down to ~1 meV at R —
-the **soft-mode dispersion** of the Pb-tilt-coupled acoustic phonon
-approaching the R-point condensation, finite-energy at M but already
-heavily damped at R.
 
 ## What gpuscatter is **not**
 
