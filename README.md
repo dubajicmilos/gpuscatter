@@ -170,13 +170,16 @@ still substantial up there.
 * Pick `n_voxels_per_cell ≥ 2.4 · q_max` for the highest q you actually
   want to analyse. For `q_max = 4 r.l.u.` (typical halide perovskite),
   set `n_voxels_per_cell = 10`. For `q_max = 5 r.l.u.`, use 12.
-* **Trim the displayed range** to `|q| ≤ q_max`. The returned
-  `Sq3DResult` exposes `result.q_max_clean = 0.85 · q_Nyq` as a default
-  safe upper bound.
-* The 2D Butler–Welberry direct sum on a fixed `(H, K, L)` plane does
+* **Drop the contaminated outer band** with `result.trim()` before
+  saving or plotting. It cuts the cube to
+  `|q| ≤ result.q_max_clean = 0.85 · q_Nyq` by default; pass
+  `q_max=...` for a custom cut. (`Sq3D.run()` itself returns the full
+  grid so you still have access to the edge if you want to inspect it.)
+* The 2D direct atomic Fourier sum on a fixed `(H, K, L)` plane does
   *not* have this artifact, since it evaluates the FT exactly at user
-  q-points without binning or deconvolution. Use it when you need a
-  clean image of one specific plane up to high q.
+  q-points without binning or deconvolution. Use `Sqw` with
+  `make_qgrid_HK_plane` (then integrate over ω if you want the static
+  partial) for a clean image of one specific plane up to high q.
 
 This is a property of every FFT-based S(q) tool, not specific to
 gpuscatter — `dynasor` and `PSF` direct-sum implementations side-step
