@@ -9,12 +9,12 @@ and [dynasor v2](https://gitlab.com/materials-modeling/dynasor), but built on **
 ~50–500× speedup over single-CPU baselines, and adds three capabilities
 those tools don't currently offer:
 
-1. **Full 3D S(q) cube** — every reciprocal-space plane in one
+1. **Full 3D S(q) cube** : every reciprocal-space plane in one
    calculation, returned per atom-pair. The user picks the simulation
    supercell size and the number of voxels per unit cell; together
    they fix the q-step and q_max of the resulting cube. Density-binning
    + 3D rFFT instead of direct atomic sum.
-2. **3D ΔPDF ** per atom-pair — inverse FFT
+2. **3D-ΔPDF** per atom-pair : inverse FFT
    of each Bragg-subtracted partial. The Patterson function is the
    autocorrelation of the scattering density, so each peak in the map
    sits on an inter-atomic vector; the ΔPDF is processed on the data with
