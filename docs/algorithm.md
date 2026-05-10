@@ -9,16 +9,22 @@ source.
 
 ### Pipeline per frame
 
+For a simulation supercell of `n_cells³` unit cells with
+`n_voxels_per_cell` real-space voxels per cell, the density grid has
+`N³` voxels per side, with `N = n_cells × n_voxels_per_cell`, and the
+real-input rFFT output is `N × N × (N/2 + 1)`. The CsPbI₃ demo uses
+`n_cells = 24`, `n_voxels_per_cell = 8`, hence `N = 192`.
+
 ```
-positions[species]    →    rho[species] (192x192x192 grid)    →    F[species] = rfft3(rho)
+positions[species]    →    rho[species] (N×N×N grid)    →    F[species] = rfft3(rho)
               CIC bin (8 corners)                3D rFFT
 ```
 
 ### Per frame, accumulators
 
-* `<F_a>` for each species (complex64, 192x192x97)
-* `<|F_a|^2>` for each species (float32, 192x192x97)
-* `<Re[F_a F_b*]>` for each cross-pair (float32, 192x192x97)
+* `<F_a>` for each species (complex64, `N × N × (N/2 + 1)`)
+* `<|F_a|^2>` for each species (float32, `N × N × (N/2 + 1)`)
+* `<Re[F_a F_b*]>` for each cross-pair (float32, `N × N × (N/2 + 1)`)
 
 ### After all frames
 
@@ -28,7 +34,7 @@ positions[species]    →    rho[species] (192x192x192 grid)    →    F[species
 This is the **exact Bragg subtraction** — using the time-mean of the
 spatial Fourier amplitude rather than the Debye-Waller approximation
 `A(q, <r>)`. It is what dynasor v2 uses, except dynasor computes by
-direct sum on a small q-set; we compute on the full 192³ grid.
+direct sum on a small q-set; we compute on the full 3D q-grid.
 
 ### CIC kernel deconvolution
 
@@ -147,13 +153,15 @@ The partial S_ab(q) is real (after Bragg subtraction the imaginary
 part of the cross terms vanishes by Hermitian symmetry of the
 density-correlation), so:
 
-* The forward S(q) is on a `(192, 192, 97)` half-spectrum (rfftn).
-* iFFT (irfftn) gives a real `(192, 192, 192)` real-space cube.
+* The forward S(q) is on an `(N, N, N/2 + 1)` half-spectrum (rfftn).
+* iFFT (irfftn) gives a real `(N, N, N)` real-space cube.
 * `fftshift` centers the origin (r=0 at the middle voxel).
 
-The voxel size in real space is `dx = L_box / 192 ≈ 0.77 Å`; the cube
-spans ±L_box/2 ≈ ±74 Å in each axis. The signal is meaningful out to
-~2 nm — beyond that, finite-supercell artefacts dominate.
+The voxel size in real space is `dx = L_box / N`; the cube spans
+±L_box/2 in each axis. For the CsPbI₃ demo (`N = 192`, `L_box ≈
+148.5 Å`), `dx ≈ 0.77 Å` and the half-extent is ≈ 74 Å. The signal is
+meaningful out to ~2 nm; beyond that, finite-supercell artefacts
+dominate.
 
 This is the partial diffuse Patterson of Welberry, Weber & Simonov.
 Each peak in `Delta_PDF_ab(r)` lives at an average pair vector `r_a - r_b`,
