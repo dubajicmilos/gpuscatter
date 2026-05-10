@@ -11,15 +11,23 @@ and [dynasor v2](https://gitlab.com/materials-modeling/dynasor)
 ~50–500× speedup over single-CPU baselines, and adds three capabilities
 those tools don't currently offer:
 
-1. **Full 3D static S(q) on a 192³ q-grid in 1.7 min** — all 97 unique
-   L-planes from one calculation. Density-binning + 3D rFFT instead of
-   direct atomic sum.
+1. **Full 3D static S(q) cube** — every reciprocal-space plane in one
+   calculation, returned per atom-pair. The user picks the simulation
+   supercell size and the number of voxels per unit cell; together
+   they fix the q-step and q_max of the resulting cube. Density-binning
+   + 3D rFFT instead of direct atomic sum.
 2. **3D ΔPDF (partial diffuse Patterson)** per atom-pair — inverse FFT
-   of each Bragg-subtracted partial. Reveals real-space displacement
-   correlations that the full PDF buries under Bragg peaks.
+   of each Bragg-subtracted partial. The Patterson function is the
+   autocorrelation of the scattering density, so each peak in the map
+   sits on an inter-atomic vector; the Δ ("diffuse") variant has the
+   average-crystal lattice peaks removed, leaving exactly the
+   real-space displacement correlations that the full PDF buries under
+   Bragg peaks.
 3. **BZ-folded S(q, ω) for phonon-dispersion projection** along
-   high-symmetry paths Γ–X–M–R–Γ, via direct atomic Fourier sum on
-   the first BZ.
+   high-symmetry paths Γ–X–M–R–Γ. S(q, ω) is computed once on the
+   first Brillouin zone (one q-point per simulation-supercell unit
+   cell) via direct atomic Fourier sum, and any user path is then
+   taken as a 2D slice through the resulting 4D cube.
 
 ## Highlights
 
@@ -119,11 +127,13 @@ its diffuse-scattering landscape contains all the characteristic
 features of a halide perovskite near a tilt-driven structural
 transition:
 
-* a soft tilt mode at the **R-point** producing rod-like X–X scattering
-  at half-integer L,
-* a broadband **Cs–Pb cubic flower** at the BZ edges of half-integer L,
+* a soft tilt mode at the **R-point** (BZ corner, q = (½, ½, ½) r.l.u.)
+  producing rod-like X–X scattering at half-integer L,
+* a broadband **Cs–Pb cubic flower** (a 4mm-symmetric four-petal
+  feature in the Cs-Pb partial S(q)) at the BZ edges of half-integer L,
   reflecting acoustic-elastic coupling through the halide framework,
-* sharp **Pb-Pb integer-Q acoustic-phonon TDS** dispersing from Γ.
+* sharp **Pb-Pb integer-Q acoustic-phonon TDS** (thermal diffuse
+  scattering off acoustic phonons) dispersing from Γ (BZ centre).
 
 ### 3D static S(q): all 97 L-planes in one shot
 
@@ -151,10 +161,11 @@ would take ~3 h. Computing the full 97-plane cube would take ~34 h.
 Any density-binning + FFT pipeline produces a **bright band on the outer
 ~10–15 % of the q-grid**, at the voxel-grid Nyquist frequency
 `q_Nyq = n_voxels_per_cell / 2 r.l.u.` per axis. Three causes compound
-there: (i) high-q signal aliases across `q_Nyq`; (ii) the `1/sinc⁴` CIC
-kernel correction boosts by 6× per axis at the boundary, 226× at the
-cube corner — exactly where the aliased contamination lives; (iii) form
-factor + bare diffuse are still substantial up there.
+there: (i) high-q signal aliases across `q_Nyq`; (ii) the `1/sinc⁴`
+deconvolution of the CIC (cloud-in-cell) deposition kernel boosts by
+6× per axis at the boundary, 226× at the cube corner — exactly where
+the aliased contamination lives; (iii) form factor + bare diffuse are
+still substantial up there.
 
 **Recommended use**:
 

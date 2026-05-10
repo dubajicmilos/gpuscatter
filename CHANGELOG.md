@@ -38,9 +38,12 @@ Initial public release.
 
 ### Features
 
-* **Sq3D**: GPU 3D static partial S(q) on a `192 x 192 x 97` q-grid via
-  density binning (cloud-in-cell) + 3D rFFT. All 97 unique L-planes from
-  one calculation, **1.7 min on a GTX 1070 for 5001 frames**.
+* **Sq3D**: GPU 3D static partial S(q) cube via density binning
+  (cloud-in-cell) + 3D rFFT. The user picks the simulation supercell
+  size and the voxels-per-cell, which together fix the q step and
+  q_max; all reciprocal-space planes come out of one calculation.
+  Demo benchmark (5001 frames, 24³ supercell, 8 voxels per cell, so
+  192 × 192 × 97 rFFT half-grid): **1.7 min on a GTX 1070**.
 * **Sqw**: GPU dynamic structure factor S(q, ω) on any user q-set, via
   direct atomic Fourier amplitude + cuFFT batched 1D time-FFT. **20 min
   for the full HK1.5 plane on a GTX 1070**, vs ~5 h on single-CPU dynasor
