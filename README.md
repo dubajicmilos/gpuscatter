@@ -182,32 +182,32 @@ still substantial up there.
   partial) for a clean image of one specific plane up to high q.
 
 
-
 ### 3D ΔPDF
 
 The inverse 3D FFT of each Bragg-subtracted partial S(q) gives the
-3D-ΔPDF.
+3D-ΔPDF. The figures below use a finer compute
+(`n_voxels_per_cell = 16`, dx_real ≈ 0.39 Å) than the Sq3D demo above
+so that the real-space features come out sharp.
 
-ΔPDF orthoslices through the origin, all seven X-ray partials × three
-slice planes (`z = 0`, `z = a/2`, `z = a`):
+Total ΔPDF sliced through the x-y plane at `z = 0`, `a/4`, `a/2`,
+`3a/4`, `a`. The first and last panel coincide by lattice periodicity:
 
-![3D delta-PDF orthoslices](docs/figures/delta_pdf_orthoslices.png)
+![Total 3D ΔPDF — z-cuts of the x-y plane](docs/figures/delta_pdf_total_z_cuts.png)
 
-Overlaying the **average atom positions** in each slice (gray = Pb,
-purple = I, orange = Cs) makes the per-atom-pair reading direct: each
-peak in the ΔPDF sits exactly on an average pair vector, with amplitude
-proportional to the displacement-correlation strength at that vector.
-
-![3D delta-PDF with atom positions overlaid](docs/figures/delta_pdf_with_atoms.png)
-
-The Pb-Cs cubic flower has its strongest signal at `z = a/2`: positive
-peaks at every `(±a/2, ±a/2)` Cs body-centre site (4mm symmetry, NN
-distance `√3·a/2 ≈ 5.4 Å`) — the real-space image of Pb-Cs displacement
+Three cross-partial ΔPDFs at `z = 0` (Cs corners and in-plane I face
+sites), `z = a/2` (Pb body-centres and out-of-plane I face sites),
+and `z = a` (≡ z = 0 by periodicity). The Pb-Cs cubic flower lives
+entirely on the `z = a/2` plane: a 4mm-symmetric pattern of positive
+peaks at every `(±a/2, ±a/2)` Cs body-centre site (NN distance
+`√3·a/2 ≈ 5.4 Å`), the real-space image of the Pb-Cs displacement
 correlations along ⟨111⟩ that produce the cubic flower in q-space.
 
-3D dual-isosurface render (red = positive, blue = negative):
+![Three cross partials at three z values](docs/figures/delta_pdf_partials_z_cuts.png)
 
-![3D dual-isosurface, positive and negative ΔPDF](docs/figures/delta_pdf_isosurfaces.png)
+3D dual-isosurface render of five partials, with one positive (red)
+and one negative (blue) iso level per partial:
+
+![Dual-isosurface 3D ΔPDF](docs/figures/delta_pdf_isosurfaces.png)
 
 
 ### Dynamic S(q, ω): the soft-tilt mode and energy decomposition
