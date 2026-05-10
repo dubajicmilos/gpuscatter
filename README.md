@@ -181,15 +181,12 @@ still substantial up there.
   `make_qgrid_HK_plane` (then integrate over ω if you want the static
   partial) for a clean image of one specific plane up to high q.
 
-This is a property of every FFT-based S(q) tool, not specific to
-gpuscatter — `dynasor` and `PSF` direct-sum implementations side-step
-it by computing only one plane at a time.
 
-### 3D ΔPDF: real-space partial diffuse Patterson
+
+### 3D ΔPDF
 
 The inverse 3D FFT of each Bragg-subtracted partial S(q) gives the
-3D-ΔPDF — the partial diffuse Patterson function of Welberry, Weber &
-Simonov, with the average-crystal lattice peaks removed.
+3D-ΔPDF.
 
 ΔPDF orthoslices through the origin, all seven X-ray partials × three
 slice planes (`z = 0`, `z = a/2`, `z = a`):
@@ -264,9 +261,7 @@ along X-M, M-R, X-R):
   signed cross structure factor `Re[F_a F_b*]`, which contains both
   eigenvector character and kinematic structure-factor phase. Eigenvectors
   need a separate force-constant calculation.
-* It does not do explicit damped-harmonic-oscillator fits.
-  `gpuscatter.dispersion` returns S(q, ω) sheets; you fit them with
-  `lmfit` or `scipy.optimize`.
+
 
 ## How it compares to existing tools
 
