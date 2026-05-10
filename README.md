@@ -1,31 +1,29 @@
 # gpuscatter
 
-**GPU-accelerated diffuse scattering, dynamic structure factor S(q, ω),
-3D static S(q), 3D ΔPDF, and phonon dispersion projection from
+**GPU-accelerated diffuse scattering, dynamic structure factor S(q, ω), 3D ΔPDF, and phonon dispersion projection from
 molecular-dynamics trajectories.**
 
 A Python package similar in spirit to
-[PSF](https://github.com/tyst3273/pynamic-structure-factor) (Sterling)
-and [dynasor v2](https://gitlab.com/materials-modeling/dynasor)
-(Fransson, Erhart et al.), but built on **CuPy + cuFFT** for an
+[PSF](https://github.com/tyst3273/pynamic-structure-factor) 
+and [dynasor v2](https://gitlab.com/materials-modeling/dynasor), but built on **CuPy + cuFFT** for an
 ~50–500× speedup over single-CPU baselines, and adds three capabilities
 those tools don't currently offer:
 
-1. **Full 3D static S(q) cube** — every reciprocal-space plane in one
+1. **Full 3D S(q) cube** — every reciprocal-space plane in one
    calculation, returned per atom-pair. The user picks the simulation
    supercell size and the number of voxels per unit cell; together
    they fix the q-step and q_max of the resulting cube. Density-binning
    + 3D rFFT instead of direct atomic sum.
-2. **3D ΔPDF (partial diffuse Patterson)** per atom-pair — inverse FFT
+2. **3D ΔPDF ** per atom-pair — inverse FFT
    of each Bragg-subtracted partial. The Patterson function is the
    autocorrelation of the scattering density, so each peak in the map
-   sits on an inter-atomic vector; the Δ ("diffuse") variant has the
-   average-crystal lattice peaks removed, leaving exactly the
+   sits on an inter-atomic vector; the ΔPDF is processed on the data with
+   average-crystal lattice Bragg peaks removed, leaving exactly the
    real-space displacement correlations that the full PDF buries under
    Bragg peaks.
 3. **BZ-folded S(q, ω) for phonon-dispersion projection** along
-   high-symmetry paths Γ–X–M–R–Γ. S(q, ω) is computed once on the
-   first Brillouin zone (one q-point per simulation-supercell unit
+   arbitrary paths in Brillouin zone (BZ). S(q, ω) is computed once on the
+   first BZ (one q-point per simulation-supercell unit
    cell) via direct atomic Fourier sum, and any user path is then
    taken as a 2D slice through the resulting 4D cube.
 
@@ -33,7 +31,7 @@ those tools don't currently offer:
 
 | Feature | Method | Wall time on GTX 1070 (5001 frames) |
 |---|---|---:|
-| Full 3D static S(q) cube (192³) | density+rFFT | **1.7 min** (all 97 L-planes at once) |
+| Full 3D static S(q) cube (192³) | density+rFFT | **1.7 min** (all 97 unique HKx-planes at once) |
 | 3D ΔPDF per partial | iFFT of Bragg-subtracted S(q) | **< 5 s** |
 | Dynamic S(q, ω) on HK plane | direct atomic FT + cuFFT batched 1D FFT | **20 min** |
 | Full first-BZ S(q, ω), 24³ × 2501 ω-bins | direct atomic FT + cuFFT | **11 min** |
