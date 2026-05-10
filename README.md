@@ -244,10 +244,6 @@ GTX 1070) feeds the `DispersionProjection` module, which extracts
 
 ![BZ-folded dispersion, 7 partials + total, signed colormap](docs/figures/bz_dispersion_signed.png)
 
-Cs-Pb dispersion within the HK1.5 plane (48-path symmetry-averaged
-along X-M, M-R, X-R):
-
-![Cs-Pb dispersion paths within HK1.5](docs/figures/sqw_dispersion_paths.png)
 
 ## What gpuscatter is **not**
 
