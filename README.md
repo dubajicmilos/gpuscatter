@@ -230,10 +230,6 @@ Energy-integrated S(q) maps in three complementary windows:
 
 S(q) maps at fixed energy slices:
 
-![S(q) at fixed ω slices](docs/figures/sqw_omega_slices.png)
-
-10 × 1-meV bin decomposition for total channel:
-
 ![10 × 1-meV bin decomposition, total](docs/figures/sqw_1meV_windows_total.png)
 
 Same decomposition for the Cs-Pb cubic-flower partial:
