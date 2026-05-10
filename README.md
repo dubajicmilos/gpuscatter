@@ -146,9 +146,14 @@ Eight L-planes from the same single 1.7-min compute:
 
 ![Eight L-planes from one compute](docs/figures/sq3d_L_plane_gallery.png)
 
-3D isosurface rendering of the partial S(q) cube:
+3D isosurface rendering of the partial S(q) cube
+(full cube `H, K, L ∈ [-1.75, +1.75]` r.l.u., 91st-percentile isovalue):
 
-![3D partial S(q) isosurfaces, six partials](docs/figures/sq3d_isosurfaces.png)
+![3D partial S(q) isosurfaces, seven partials](docs/figures/sq3d_isosurfaces.png)
+
+Rotating animation of the same isosurfaces:
+
+![Rotating 3D partial S(q) isosurfaces](docs/figures/sq3d_isosurfaces_rotation.gif)
 
 For comparison, computing the same eight L-planes via direct atomic
 Fourier sum (numba JIT, single L plane at a time) on the same hardware
