@@ -296,13 +296,13 @@ Plus the methods papers for the underlying algorithms:
   direct-sum diffuse calculation.
 * Berger, E. et al.
   [*Comp. Phys. Commun.* **316**, 109759 (2025)](https://doi.org/10.1016/j.cpc.2025.109759):
-  dynasor v2 algorithms, on which our `Sqw` is based.
+  dynasor v2 algorithms.
 * Weber, T. & Simonov, A.
   [*Z. Krist.* **227**, 238 (2012)](https://doi.org/10.1524/zkri.2012.1504):
   3D-ΔPDF formalism.
 * Simonov, A. & Goodwin, A. L.
   [*Nat. Rev. Chem.* **4**, 657 (2020)](https://doi.org/10.1038/s41570-020-00228-3):
-  ΔPDF review.
+  3D-ΔPDF review.
 
 ## Project layout
 
