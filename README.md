@@ -12,8 +12,9 @@ those tools don't currently offer:
 1. **Full 3D S(q) cube**: every reciprocal-space plane in one
    calculation, returned per atom-pair. The user picks the simulation
    supercell size and the number of voxels per unit cell; together
-   they fix the q-step and q_max of the resulting cube. Density-binning
-   + 3D rFFT instead of direct atomic sum.
+   they fix the q-step and q_max of the resulting cube. Computed by
+   density-binning followed by a 3D rFFT, rather than the direct
+   atomic Fourier sum used by other tools.
 2. **3D-ΔPDF** per atom-pair: inverse FFT
    of each Bragg-subtracted partial. The Patterson function is the
    autocorrelation of the scattering density, so each peak in the map
@@ -31,7 +32,7 @@ those tools don't currently offer:
 
 | Feature | Method | Wall time on GTX 1070 (5001 frames) |
 |---|---|---:|
-| Full 3D static S(q) cube (192³) | density+rFFT | **1.7 min** (all 97 unique HKx-planes at once) |
+| Full 3D static S(q) cube (192³) | density-binning + 3D rFFT | **1.7 min** (all 97 unique L-planes at once) |
 | 3D ΔPDF per partial | iFFT of Bragg-subtracted S(q) | **< 5 s** |
 | Dynamic S(q, ω) on HK plane | direct atomic FT + cuFFT batched 1D FFT | **20 min** |
 | Full first-BZ S(q, ω), 24³ × 2501 ω-bins | direct atomic FT + cuFFT | **11 min** |
@@ -164,8 +165,8 @@ Any density-binning + FFT pipeline produces a **bright band on the outer
 there: (i) high-q signal aliases across `q_Nyq`; (ii) the `1/sinc⁴`
 deconvolution of the CIC (cloud-in-cell) deposition kernel boosts by
 6× per axis at the boundary, 226× at the cube corner, exactly where
-the aliased contamination lives; (iii) form factor + bare diffuse are
-still substantial up there.
+the aliased contamination lives; (iii) the form factor and the bare
+diffuse intensity are still substantial up there.
 
 **Recommended use**:
 
@@ -266,8 +267,8 @@ GTX 1070) feeds the `DispersionProjection` module, which extracts
 | PSF | numba + multiproc | direct sum (1 plane) | ✗ | ✓ | ✓ | MIT |
 | Yell, DISCUS, ZODS | C++ / Fortran | direct sum (small q) | ✓ | ✗ | ✗ | various |
 
-Where `gpuscatter`'s **density-binning + 3D rFFT** approach to 3D static
-S(q) is the key novelty: it changes the asymptotic complexity from
+The key novelty is `gpuscatter`'s **density-binning + 3D rFFT** approach
+to 3D static S(q): it changes the asymptotic complexity from
 `O(n_atoms × n_q)` (direct sum, what every other tool does) to
 `O(n_atoms + N³ log N)` (binning + FFT). For our 600 K demo with
 ~70 000 atoms × 3.6 M q-points, the asymptotic ratio is ~10×; combined
