@@ -9,12 +9,12 @@ and [dynasor v2](https://gitlab.com/materials-modeling/dynasor), but built on **
 ~50–500× speedup over single-CPU baselines, and adds three capabilities
 those tools don't currently offer:
 
-1. **Full 3D S(q) cube** : every reciprocal-space plane in one
+1. **Full 3D S(q) cube**: every reciprocal-space plane in one
    calculation, returned per atom-pair. The user picks the simulation
    supercell size and the number of voxels per unit cell; together
    they fix the q-step and q_max of the resulting cube. Density-binning
    + 3D rFFT instead of direct atomic sum.
-2. **3D-ΔPDF** per atom-pair : inverse FFT
+2. **3D-ΔPDF** per atom-pair: inverse FFT
    of each Bragg-subtracted partial. The Patterson function is the
    autocorrelation of the scattering density, so each peak in the map
    sits on an inter-atomic vector; the ΔPDF is processed on the data with
@@ -114,9 +114,9 @@ For runnable end-to-end scripts see [`examples/`](examples/).
 ## Demo: CsPbI₃ at 600 K
 
 The headline demo uses **5001 frames** (1 ns total at 200 fs frame
-spacing) of a **24 × 24 × 24 cubic supercell** of **CsPbI₃ at 600 K** —
-69 120 atoms, lattice constant a = 6.19 Å, cubic edge L = 148.5 Å —
-from the [Baldwin et al. (2024)](https://arxiv.org/abs/2410.20177)
+spacing) of a **24 × 24 × 24 cubic supercell** of **CsPbI₃ at 600 K**
+(69 120 atoms, lattice constant a = 6.19 Å, cubic edge L = 148.5 Å)
+from the [Baldwin et al. (2024)](https://doi.org/10.1002/smll.202303565)
 ACE-MLIP trajectory. The 24-cell side fixes the q-resolution at
 1/24 r.l.u. (~0.042 Å⁻¹) on every output, and the 1 ns total time gives
 ~4 µeV energy resolution on S(q, ω). CsPbI₃ at 600 K is in the cubic
@@ -156,14 +156,14 @@ For comparison, computing the same eight L-planes via direct atomic
 Fourier sum (numba JIT, single L plane at a time) on the same hardware
 would take ~3 h. Computing the full 97-plane cube would take ~34 h.
 
-#### Caveat — q_Nyquist edge artifact
+#### Caveat: q_Nyquist edge artifact
 
 Any density-binning + FFT pipeline produces a **bright band on the outer
 ~10–15 % of the q-grid**, at the voxel-grid Nyquist frequency
 `q_Nyq = n_voxels_per_cell / 2 r.l.u.` per axis. Three causes compound
 there: (i) high-q signal aliases across `q_Nyq`; (ii) the `1/sinc⁴`
 deconvolution of the CIC (cloud-in-cell) deposition kernel boosts by
-6× per axis at the boundary, 226× at the cube corner — exactly where
+6× per axis at the boundary, 226× at the cube corner, exactly where
 the aliased contamination lives; (iii) form factor + bare diffuse are
 still substantial up there.
 
@@ -194,7 +194,7 @@ so that the real-space features come out sharp.
 Total ΔPDF sliced through the x-y plane at `z = 0`, `a/4`, `a/2`,
 `3a/4`, `a`. The first and last panel coincide by lattice periodicity:
 
-![Total 3D ΔPDF — z-cuts of the x-y plane](docs/figures/delta_pdf_total_z_cuts.png)
+![Total 3D ΔPDF, z-cuts of the x-y plane](docs/figures/delta_pdf_total_z_cuts.png)
 
 Three cross-partial ΔPDFs at `z = 0` (Cs corners and in-plane I face
 sites), `z = a/2` (Pb body-centres and out-of-plane I face sites),
@@ -226,9 +226,9 @@ Energy-integrated S(q) maps in three complementary windows:
   dominates → overdamped soft tilt mode, FWHM ≈ 0.5 meV → relaxation
   τ ≈ 1.3 ps.
 * **Inelastic (1 < |E| < 10 meV)**: integer-Q Bragg residuals
-  (acoustic-phonon TDS) and the **broadband Cs-Pb cubic flower** persist
-  — confirming the flower is acoustic-elastic, not pure soft-mode.
-* **Total**: sum-rule check — equals the static S(q) by `∫S(q,ω)dω = S(q)`.
+  (acoustic-phonon TDS) and the **broadband Cs-Pb cubic flower** persist,
+  confirming the flower is acoustic-elastic, not pure soft-mode.
+* **Total**: sum-rule check; equals the static S(q) by `∫S(q,ω)dω = S(q)`.
 
 S(q) maps at fixed energy slices:
 
@@ -251,7 +251,7 @@ GTX 1070) feeds the `DispersionProjection` module, which extracts
 
 * It is not a force-constant lattice-dynamics code (use `phonopy`,
   `phono3py`, `lammps-pair`).
-* It does not extract phonon eigenvectors directly — it gives the
+* It does not extract phonon eigenvectors directly; it gives the
   signed cross structure factor `Re[F_a F_b*]`, which contains both
   eigenvector character and kinematic structure-factor phase. Eigenvectors
   need a separate force-constant calculation.
@@ -290,13 +290,17 @@ If you use `gpuscatter` in published work, please cite:
 
 Plus the methods papers for the underlying algorithms:
 
-* Butler, M. R. & Welberry, T. R. *J. Appl. Cryst.* **25**, 391 (1992)
-  — direct-sum diffuse calculation.
-* Berger, M. J. et al. *Comp. Phys. Commun.* **316**, 109759 (2025) —
+* Butler, B. D. & Welberry, T. R.
+  [*J. Appl. Cryst.* **25**, 391 (1992)](https://doi.org/10.1107/S0021889891014322):
+  direct-sum diffuse calculation.
+* Berger, E. et al.
+  [*Comp. Phys. Commun.* **316**, 109759 (2025)](https://doi.org/10.1016/j.cpc.2025.109759):
   dynasor v2 algorithms, on which our `Sqw` is based.
-* Weber, T. & Simonov, A. *Z. Krist.* **227**, 238 (2012) — 3D-ΔPDF
-  formalism.
-* Simonov, A. & Goodwin, A. L. *Nat. Rev. Chem.* **4**, 657 (2020) —
+* Weber, T. & Simonov, A.
+  [*Z. Krist.* **227**, 238 (2012)](https://doi.org/10.1524/zkri.2012.1504):
+  3D-ΔPDF formalism.
+* Simonov, A. & Goodwin, A. L.
+  [*Nat. Rev. Chem.* **4**, 657 (2020)](https://doi.org/10.1038/s41570-020-00228-3):
   ΔPDF review.
 
 ## Project layout
@@ -319,4 +323,4 @@ gpuscatter/
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
