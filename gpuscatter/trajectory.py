@@ -28,7 +28,8 @@ import numpy as np
 ATOMIC_NUMBER_TO_SYMBOL: dict[int, str] = {
     1: 'H',  6: 'C', 7: 'N', 8: 'O', 9: 'F',
     11: 'Na', 12: 'Mg', 13: 'Al', 14: 'Si', 16: 'S', 17: 'Cl',
-    19: 'K', 20: 'Ca', 22: 'Ti', 35: 'Br', 37: 'Rb',
+    19: 'K', 20: 'Ca', 22: 'Ti', 24: 'Cr', 25: 'Mn', 26: 'Fe',
+    27: 'Co', 28: 'Ni', 29: 'Cu', 30: 'Zn', 35: 'Br', 37: 'Rb',
     38: 'Sr', 53: 'I', 55: 'Cs', 56: 'Ba', 82: 'Pb', 83: 'Bi',
 }
 

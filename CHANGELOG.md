@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Elements
+
+* Added 3d transition-metal coverage: **Cr, Mn, Fe, Co, Ni, Cu, Zn**.
+  Cromer-Mann X-ray coefficients (International Tables Vol. C, Table
+  6.1.1.4) and NIST neutron coherent scattering lengths added to
+  `gpuscatter/form_factors.py`. Corresponding atomic-number entries
+  (Z = 24-30) added to `ATOMIC_NUMBER_TO_SYMBOL` in
+  `gpuscatter/trajectory.py`. Validated by the existing
+  `test_f_xray_at_zero_returns_atomic_number` test (extended to cover
+  the new elements and Al). Enables Sq3D on metallic systems such as
+  NiAl, Fe-Cr, Cu-Zn alloys etc.
+
 ### Documentation
 
 * **q_Nyquist edge artifact** documented in the `Sq3D` and `Sq3DConfig`
