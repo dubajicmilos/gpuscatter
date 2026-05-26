@@ -32,8 +32,11 @@ HIGH_SYMMETRY_POINTS_CUBIC = {
 
 
 def _q_red_to_index(q_red, n_cells):
-    """Map a reduced q in [-1/2, 1/2) to BZ-grid index in [0, n_cells)."""
-    return int(np.round(q_red * n_cells)) % n_cells
+    """Map a reduced q in [-1/2, 1/2] to BZ-grid index in [0, n_cells).
+
+    Grid is built as ``(arange(n) - n//2) / n``, so index 0 holds q = -n//2/n.
+    """
+    return int(np.round(q_red * n_cells) + n_cells // 2) % n_cells
 
 
 def make_path_indices(path_pts: Sequence[np.ndarray], n_cells: int,
