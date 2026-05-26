@@ -21,6 +21,7 @@ You can subclass :class:`BaseTrajectory` to support other formats.
 from __future__ import annotations
 from pathlib import Path
 from typing import Iterable, Iterator
+import warnings
 import numpy as np
 
 
@@ -321,6 +322,220 @@ class LammpsDumpTrajectory(BaseTrajectory):
     def iter_frames(self) -> Iterator[tuple[int, np.ndarray]]:
         for i, pos in enumerate(self._frames):
             yield i, pos
+
+
+class BinaryTrajectory(BaseTrajectory):
+    """Fast reader for pre-converted binary trajectory files.
+
+    Loads a directory produced by
+    :meth:`StreamingLammpsDumpTrajectory.to_binary`. Positions are
+    memory-mapped so frame reads are near-instant with no text parsing.
+
+    Parameters
+    ----------
+    dir_path
+        Directory containing ``meta.npz`` and ``positions.npy``.
+    """
+
+    def __init__(self, dir_path: Path):
+        dir_path = Path(dir_path)
+        meta = np.load(dir_path / 'meta.npz', allow_pickle=True)
+        self.species = meta['species']
+        self.L_box = float(meta['L_box'])
+        self.ref_positions = meta['ref_positions'].astype(np.float32)
+        self._positions = np.load(
+            dir_path / 'positions.npy', mmap_mode='r'
+        )
+        self.n_frames = self._positions.shape[0]
+
+    def iter_frames(self) -> Iterator[tuple[int, np.ndarray]]:
+        for i in range(self.n_frames):
+            yield i, np.asarray(self._positions[i], dtype=np.float32)
+
+
+class StreamingLammpsDumpTrajectory(BaseTrajectory):
+    """Memory-efficient reader for large LAMMPS dump files.
+
+    Unlike :class:`LammpsDumpTrajectory`, this never loads the whole file
+    into memory. It reads one frame at a time via ``iter_frames()``,
+    keeping RAM usage constant regardless of file size.
+
+    For repeated computations on the same trajectory, call
+    :meth:`to_binary` once to convert to a memory-mapped binary format,
+    then use :class:`BinaryTrajectory` for ~10x faster frame reads.
+
+    Parameters
+    ----------
+    file_path
+        Path to a LAMMPS dump file (may contain many timesteps).
+    skip_frames
+        Number of leading frames to skip (e.g. 1 to discard pre-equilibrium).
+    """
+
+    def __init__(self, file_path: Path, skip_frames: int = 0):
+        self.file_path = Path(file_path)
+        self._skip = skip_frames
+        self._init_metadata()
+
+    def _count_lines_fast(self) -> int:
+        count = 0
+        with open(self.file_path, 'rb') as f:
+            for chunk in iter(lambda: f.read(1 << 20), b''):
+                count += chunk.count(b'\n')
+        return count
+
+    def _init_metadata(self):
+        with open(self.file_path) as f:
+            f.readline()  # ITEM: TIMESTEP
+            f.readline()  # timestep value
+            f.readline()  # ITEM: NUMBER OF ATOMS
+            n_atoms = int(f.readline().strip())
+
+            header_line = f.readline()  # ITEM: BOX BOUNDS ...
+            is_triclinic = 'xy' in header_line
+            row0 = f.readline().split()
+            row1 = f.readline().split()
+            row2 = f.readline().split()
+            xlo, xhi = float(row0[0]), float(row0[1])
+            self.L_box = xhi - xlo
+
+            if is_triclinic:
+                LammpsDumpTrajectory._check_tilt(
+                    LammpsDumpTrajectory, row0, row1, row2
+                )
+
+            atoms_header = f.readline()  # ITEM: ATOMS ...
+            cols = atoms_header.split()[2:]
+            el_col = cols.index('element')
+            x_col = cols.index('x')
+            y_col = cols.index('y')
+            z_col = cols.index('z')
+            self._col_indices = (el_col, x_col, y_col, z_col)
+
+            species = []
+            ref_pos = np.empty((n_atoms, 3), dtype=np.float32)
+            for j in range(n_atoms):
+                tok = f.readline().split()
+                species.append(tok[el_col])
+                ref_pos[j, 0] = float(tok[x_col])
+                ref_pos[j, 1] = float(tok[y_col])
+                ref_pos[j, 2] = float(tok[z_col])
+
+            self.species = np.array(species)
+            self.ref_positions = ref_pos
+            self._n_atoms = n_atoms
+
+        total_lines = self._count_lines_fast()
+        lines_per_frame = 9 + n_atoms
+        total_frames = total_lines // lines_per_frame
+        self.n_frames = total_frames - self._skip
+
+    def iter_frames(self) -> Iterator[tuple[int, np.ndarray]]:
+        el_col, x_col, y_col, z_col = self._col_indices
+        n_atoms = self._n_atoms
+        global_idx = 0
+        frame_in_file = 0
+
+        with open(self.file_path) as f:
+            while True:
+                line = f.readline()
+                if not line:
+                    break
+                if not line.startswith('ITEM: TIMESTEP'):
+                    continue
+                f.readline()  # timestep
+                f.readline()  # ITEM: NUMBER OF ATOMS
+                f.readline()  # n_atoms
+                f.readline()  # ITEM: BOX BOUNDS
+                f.readline()  # xlo xhi
+                f.readline()  # ylo yhi
+                f.readline()  # zlo zhi
+                f.readline()  # ITEM: ATOMS header
+
+                if frame_in_file < self._skip:
+                    for _ in range(n_atoms):
+                        f.readline()
+                    frame_in_file += 1
+                    continue
+
+                positions = np.empty((n_atoms, 3), dtype=np.float32)
+                for j in range(n_atoms):
+                    tok = f.readline().split()
+                    positions[j, 0] = float(tok[x_col])
+                    positions[j, 1] = float(tok[y_col])
+                    positions[j, 2] = float(tok[z_col])
+
+                yield global_idx, positions
+                global_idx += 1
+                frame_in_file += 1
+
+    def to_binary(self, out_dir: Path | None = None,
+                  verbose: bool = True) -> Path:
+        """Convert this LAMMPS dump to a fast binary directory.
+
+        Writes ``meta.npz`` (species, L_box, ref_positions) and
+        ``positions.npy`` (float32, shape ``(n_frames, n_atoms, 3)``)
+        to *out_dir*. The result can be loaded instantly via
+        :class:`BinaryTrajectory`.
+
+        Parameters
+        ----------
+        out_dir
+            Output directory. Defaults to ``<dump_stem>_binary/`` next
+            to the dump file.
+        verbose
+            Print progress every 500 frames.
+
+        Returns
+        -------
+        Path
+            The output directory.
+        """
+        import time as _time
+
+        if out_dir is None:
+            out_dir = self.file_path.with_name(
+                self.file_path.stem + '_binary'
+            )
+        out_dir = Path(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        np.savez(
+            out_dir / 'meta.npz',
+            species=self.species,
+            L_box=np.float64(self.L_box),
+            ref_positions=self.ref_positions,
+        )
+
+        pos_path = out_dir / 'positions.npy'
+        shape = (self.n_frames, self._n_atoms, 3)
+        mmap = np.lib.format.open_memmap(
+            str(pos_path), mode='w+', dtype=np.float32, shape=shape,
+        )
+
+        t0 = _time.time()
+        for idx, pos in self.iter_frames():
+            mmap[idx] = pos
+            if verbose and ((idx + 1) % 500 == 0
+                            or idx + 1 == self.n_frames):
+                elapsed = _time.time() - t0
+                rate = (idx + 1) / max(elapsed, 1e-9)
+                eta = (self.n_frames - idx - 1) / max(rate, 1e-9)
+                size_gb = pos_path.stat().st_size / 1e9
+                print(f'[to_binary] frame {idx+1}/{self.n_frames}, '
+                      f'{elapsed:.0f}s, eta {eta:.0f}s, '
+                      f'{size_gb:.1f} GB written', flush=True)
+
+        mmap.flush()
+        del mmap
+
+        if verbose:
+            total = _time.time() - t0
+            size_gb = pos_path.stat().st_size / 1e9
+            print(f'[to_binary] done in {total:.0f}s, '
+                  f'{size_gb:.1f} GB -> {out_dir}')
+
+        return out_dir
 
 
 def unwrap_positions(positions: np.ndarray, ref: np.ndarray,

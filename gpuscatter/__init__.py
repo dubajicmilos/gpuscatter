@@ -16,12 +16,14 @@ See ``examples/`` for runnable scripts using the CsPbI3 600 K demo data.
 from .form_factors import f_xray, f_neutron, CROMER_MANN, B_NEUTRON
 from .trajectory import (
     BaseTrajectory, NpzTrajectory, SingleNpzTrajectory,
-    unwrap_positions, ATOMIC_NUMBER_TO_SYMBOL, LammpsDumpTrajectory
+    unwrap_positions, ATOMIC_NUMBER_TO_SYMBOL, LammpsDumpTrajectory,
+    StreamingLammpsDumpTrajectory, BinaryTrajectory,
 )
 from .sq3d import Sq3D, Sq3DConfig, Sq3DResult
 from .sqw import (
     Sqw, SqwConfig, SqwResult,
     make_qgrid_HK_plane, make_qgrid_BZ,
+    auto_atom_chunk, query_gpu_vram,
 )
 from .delta_pdf import compute_delta_pdf, DeltaPDFResult
 from .dispersion import (
@@ -38,6 +40,8 @@ __all__ = [
     'Sq3D', 'Sq3DConfig', 'Sq3DResult',
     'Sqw', 'SqwConfig', 'SqwResult',
     'make_qgrid_HK_plane', 'make_qgrid_BZ',
+    'auto_atom_chunk', 'query_gpu_vram',
+    'BinaryTrajectory',
     'compute_delta_pdf', 'DeltaPDFResult',
     'DispersionProjection', 'project_dispersion',
     'HIGH_SYMMETRY_POINTS_CUBIC', 'make_path_indices',
