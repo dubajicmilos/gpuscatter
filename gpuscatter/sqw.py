@@ -33,6 +33,43 @@ from .trajectory import BaseTrajectory, unwrap_positions
 
 H_PLANCK_meVps = 4.13567        # h in meV * ps
 
+_VRAM_HEADROOM = 0.85  # use at most 85% of free VRAM for transient allocations
+
+
+def query_gpu_vram() -> tuple[int, int]:
+    """Return (free_bytes, total_bytes) on the current CUDA device."""
+    import cupy as cp
+    free, total = cp.cuda.Device().mem_info
+    return int(free), int(total)
+
+
+def auto_atom_chunk(n_q: int, n_frames: int, n_species: int,
+                    min_chunk: int = 4096,
+                    max_chunk: int = 131072) -> int:
+    """Pick the largest atom_chunk that fits in GPU VRAM.
+
+    The peak transient allocation in ``_amplitude_inline`` is::
+
+        phase = q_vecs @ p.T            # (n_q, chunk) float32
+        cos/sin(phase)                  # (n_q, chunk) float32
+
+    So peak transient = ``2 * n_q * chunk * 4`` bytes. The persistent
+    allocation is ``F(q, t) = n_q * n_frames * 8 * n_species`` bytes
+    (complex64). We pick the largest power-of-2 chunk such that
+    persistent + transient fits in 85% of free VRAM.
+    """
+    free, total = query_gpu_vram()
+    persistent = n_q * n_frames * 8 * n_species
+    available = int(free * _VRAM_HEADROOM) - persistent
+    if available <= 0:
+        return min_chunk
+    max_from_vram = available // (2 * n_q * 4)
+    chunk = min(max_from_vram, max_chunk)
+    chunk = max(chunk, min_chunk)
+    # round down to power of 2 for optimal GPU occupancy
+    chunk = 1 << (chunk.bit_length() - 1)
+    return max(chunk, min_chunk)
+
 
 @dataclass
 class SqwConfig:
@@ -42,8 +79,9 @@ class SqwConfig:
     species: Sequence[str] | None = None
     cross_pairs: Sequence[tuple[str, str]] | None = None
     weighting: str = 'xray'
-    atom_chunk: int = 8192          # chunking over atoms in matmul
+    atom_chunk: int | str = 'auto'  # 'auto' queries GPU VRAM; or set an int
     sign_convention: str = 'minus'  # 'minus' for exp(-iq.r) (PSF/dynasor), 'plus' for exp(+iq.r)
+    species_groups: dict[str, list[str]] | None = None  # e.g. {'A': ['H','C','N'], 'Pb': ['Pb'], 'Br': ['Br']}
 
 
 @dataclass
@@ -168,12 +206,24 @@ class Sqw:
         self.cfg = config
 
         unique_species = sorted(set(trajectory.species.tolist()))
-        if config.species is None:
-            self.species = unique_species
+        self._grouped = config.species_groups is not None
+
+        if self._grouped:
+            self._groups = config.species_groups
+            self.species = list(self._groups.keys())
+            self._elem_species = []
+            for elems in self._groups.values():
+                self._elem_species.extend(elems)
+            self._elem_species = sorted(set(self._elem_species))
+            self.species_idx = {sp: np.where(trajectory.species == sp)[0]
+                                for sp in self._elem_species}
         else:
-            self.species = list(config.species)
-        self.species_idx = {sp: np.where(trajectory.species == sp)[0]
-                            for sp in self.species}
+            if config.species is None:
+                self.species = unique_species
+            else:
+                self.species = list(config.species)
+            self.species_idx = {sp: np.where(trajectory.species == sp)[0]
+                                for sp in self.species}
 
         if config.cross_pairs is None:
             sp = self.species
@@ -203,51 +253,91 @@ class Sqw:
         NF = traj.n_frames
         n_q = cfg.q_vecs.shape[0]
 
+        # ---- resolve atom_chunk ----
+        if cfg.atom_chunk == 'auto':
+            chunk = auto_atom_chunk(n_q, NF, len(self.species))
+        else:
+            chunk = int(cfg.atom_chunk)
+
         if verbose:
             dev = cp.cuda.runtime.getDeviceProperties(0)['name']
             if isinstance(dev, bytes):
                 dev = dev.decode()
+            free_gb, total_gb = query_gpu_vram()
             E_max = H_PLANCK_meVps / (2 * cfg.dt_fs / 1000.0)
             dE = H_PLANCK_meVps / (NF * cfg.dt_fs / 1000.0)
-            print(f'[gpuscatter.Sqw] device: {dev}')
+            print(f'[gpuscatter.Sqw] device: {dev} '
+                  f'({total_gb / 1e9:.1f} GB total, '
+                  f'{free_gb / 1e9:.1f} GB free)')
             print(f'[gpuscatter.Sqw] frames: {NF}, dt = {cfg.dt_fs} fs, '
                   f'n_q = {n_q}, species = {self.species}')
+            if self._grouped:
+                print(f'[gpuscatter.Sqw] species groups: {self._groups}')
             print(f'[gpuscatter.Sqw] E_max (Nyquist) = {E_max:.3f} meV, '
                   f'dE = {dE * 1000:.3f} ueV')
             mem_gb = n_q * NF * 8 / 1e9 * len(self.species)
             print(f'[gpuscatter.Sqw] F(q,t) GPU storage: {mem_gb:.2f} GB '
-                  f'(complex64, {len(self.species)} species)')
+                  f'(complex64, {len(self.species)} groups)')
+            print(f'[gpuscatter.Sqw] atom_chunk: {chunk} '
+                  f'({"auto" if cfg.atom_chunk == "auto" else "manual"})')
 
         # ---- form factors ----
         q_norm = np.linalg.norm(cfg.q_vecs, axis=1).astype(np.float64)
+
+        if self._grouped:
+            elem_list = self._elem_species
+        else:
+            elem_list = self.species
+
         if cfg.weighting == 'xray':
-            f_q = {sp: f_xray(q_norm, sp).astype(np.float32)
-                   for sp in self.species}
+            f_q_elem = {sp: f_xray(q_norm, sp).astype(np.float32)
+                        for sp in elem_list}
         elif cfg.weighting == 'neutron':
-            # b is q-independent (point nuclear scattering)
-            f_q = {sp: np.full(n_q, f_neutron(sp), dtype=np.float32)
-                   for sp in self.species}
+            f_q_elem = {sp: np.full(n_q, f_neutron(sp), dtype=np.float32)
+                        for sp in elem_list}
         elif cfg.weighting == 'unit':
-            f_q = {sp: np.ones(n_q, dtype=np.float32) for sp in self.species}
+            f_q_elem = {sp: np.ones(n_q, dtype=np.float32)
+                        for sp in elem_list}
         else:
             raise ValueError(f'Unknown weighting: {cfg.weighting!r}')
 
-        # ---- F(q, t) GPU storage ----
+        # ---- F(q, t) GPU storage (per group or per element) ----
         F = {sp: cp.zeros((n_q, NF), dtype=cp.complex64)
              for sp in self.species}
         qv_gpu = cp.asarray(cfg.q_vecs, dtype=cp.float32)
+
+        if self._grouped:
+            cp_fq_elem = {sp: cp.asarray(f_q_elem[sp])
+                          for sp in elem_list}
 
         # ---- frame loop ----
         t0 = time.time()
         for global_idx, p in traj.iter_frames():
             p_unwrapped = unwrap_positions(p, traj.ref_positions, traj.L_box)
-            for sp in self.species:
-                p_sp_gpu = cp.asarray(p_unwrapped[self.species_idx[sp]],
-                                       dtype=cp.float32)
-                A = _amplitude_inline(p_sp_gpu, qv_gpu,
-                                       sign=cfg.sign_convention,
-                                       chunk=cfg.atom_chunk)
-                F[sp][:, global_idx] = A
+
+            if self._grouped:
+                for grp_name, elems in self._groups.items():
+                    grp_A = cp.zeros(n_q, dtype=cp.complex64)
+                    for elem in elems:
+                        idx = self.species_idx[elem]
+                        if len(idx) == 0:
+                            continue
+                        p_sp_gpu = cp.asarray(p_unwrapped[idx],
+                                              dtype=cp.float32)
+                        A = _amplitude_inline(p_sp_gpu, qv_gpu,
+                                              sign=cfg.sign_convention,
+                                              chunk=chunk)
+                        grp_A += cp_fq_elem[elem] * A
+                    F[grp_name][:, global_idx] = grp_A
+            else:
+                for sp in self.species:
+                    p_sp_gpu = cp.asarray(p_unwrapped[self.species_idx[sp]],
+                                          dtype=cp.float32)
+                    A = _amplitude_inline(p_sp_gpu, qv_gpu,
+                                          sign=cfg.sign_convention,
+                                          chunk=chunk)
+                    F[sp][:, global_idx] = A
+
             if verbose and ((global_idx + 1) % 200 == 0
                             or global_idx + 1 == NF):
                 cp.cuda.runtime.deviceSynchronize()
@@ -278,17 +368,25 @@ class Sqw:
         E_axis = self._energy_axis(NF)
 
         # ---- partials ----
-        cp_fq = {sp: cp.asarray(f_q[sp]) for sp in self.species}
         partials = {}
-
         all_pairs = [(sp, sp) for sp in self.species] + list(self.cross_pairs)
-        for (a, b) in all_pairs:
-            w = 1.0 if a == b else 2.0
-            S = cp.real(F_omega[a] * cp.conj(F_omega[b])) / NF
-            S = S * cp_fq[a][:, None] * cp_fq[b][:, None] * w
-            S = S[:, :n_omega_pos]
-            partials[(a, b)] = cp.asnumpy(S).astype(np.float32)
-            del S
+
+        if self._grouped:
+            for (a, b) in all_pairs:
+                w = 1.0 if a == b else 2.0
+                S = cp.real(F_omega[a] * cp.conj(F_omega[b])) / NF * w
+                S = S[:, :n_omega_pos]
+                partials[(a, b)] = cp.asnumpy(S).astype(np.float32)
+                del S
+        else:
+            cp_fq = {sp: cp.asarray(f_q_elem[sp]) for sp in self.species}
+            for (a, b) in all_pairs:
+                w = 1.0 if a == b else 2.0
+                S = cp.real(F_omega[a] * cp.conj(F_omega[b])) / NF
+                S = S * cp_fq[a][:, None] * cp_fq[b][:, None] * w
+                S = S[:, :n_omega_pos]
+                partials[(a, b)] = cp.asnumpy(S).astype(np.float32)
+                del S
 
         total = np.zeros_like(next(iter(partials.values())))
         for S in partials.values():
