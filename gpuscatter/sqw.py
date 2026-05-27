@@ -365,17 +365,32 @@ class Sqw:
             print(f'[gpuscatter.Sqw] time-FFT: {time.time() - t_fft:.1f}s')
 
         n_omega_pos = NF // 2 + 1
+        n_fold = NF // 2 - 1
         E_axis = self._energy_axis(NF)
 
-        # ---- partials ----
+        # ---- partials (fold negative frequencies onto positive) ----
         partials = {}
         all_pairs = [(sp, sp) for sp in self.species] + list(self.cross_pairs)
+
+        def _fold(S_full):
+            """Average S(+w) and S(-w) for bins 1..NF//2-1.
+
+            Classical MD produces S(q,w) = S(q,-w), so the two sides
+            are independent noisy estimates of the same quantity.
+            Folding gives sqrt(2) SNR improvement per frequency bin.
+            DC (bin 0) and Nyquist (bin NF//2) have no counterpart.
+            """
+            S_pos = S_full[:, :n_omega_pos]
+            S_neg = S_full[:, -1:-1 - n_fold:-1]
+            S_out = S_pos.copy()
+            S_out[:, 1:1 + n_fold] = (S_pos[:, 1:1 + n_fold] + S_neg) / 2.0
+            return S_out
 
         if self._grouped:
             for (a, b) in all_pairs:
                 w = 1.0 if a == b else 2.0
                 S = cp.real(F_omega[a] * cp.conj(F_omega[b])) / NF * w
-                S = S[:, :n_omega_pos]
+                S = _fold(S)
                 partials[(a, b)] = cp.asnumpy(S).astype(np.float32)
                 del S
         else:
@@ -384,7 +399,7 @@ class Sqw:
                 w = 1.0 if a == b else 2.0
                 S = cp.real(F_omega[a] * cp.conj(F_omega[b])) / NF
                 S = S * cp_fq[a][:, None] * cp_fq[b][:, None] * w
-                S = S[:, :n_omega_pos]
+                S = _fold(S)
                 partials[(a, b)] = cp.asnumpy(S).astype(np.float32)
                 del S
 
