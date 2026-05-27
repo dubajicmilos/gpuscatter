@@ -389,11 +389,14 @@ class Sq3D:
         n_R = max(cfg.sub_regions, 1)
 
         # ---- accumulators (per region per species) ----
-        F_avg = {(r, sp): cp.zeros(shape_q, dtype=cp.complex64)
+        # float64/complex128 to avoid Bragg-subtraction precision loss
+        # over many frames (float32 loses cross-partial negatives when
+        # Bragg peaks are strong, e.g. CsPbCl3 near T_c with 5001 frames)
+        F_avg = {(r, sp): cp.zeros(shape_q, dtype=cp.complex128)
                  for r in range(n_R) for sp in self.species}
-        FF_avg = {(r, sp): cp.zeros(shape_q, dtype=cp.float32)
+        FF_avg = {(r, sp): cp.zeros(shape_q, dtype=cp.float64)
                   for r in range(n_R) for sp in self.species}
-        Cross_avg = {(r, key): cp.zeros(shape_q, dtype=cp.float32)
+        Cross_avg = {(r, key): cp.zeros(shape_q, dtype=cp.float64)
                      for r in range(n_R) for key in self.cross_pairs}
 
         # ---- frame loop ----
@@ -413,13 +416,13 @@ class Sq3D:
                     rho = _cic_bin_gpu(p_sp, N, dx)
                     F = cp.fft.rfftn(rho)
                     del rho
-                    FF_avg[(r, sp)] += cp.abs(F).astype(cp.float32) ** 2
-                    F_avg[(r, sp)] += F
+                    FF_avg[(r, sp)] += cp.abs(F).astype(cp.float64) ** 2
+                    F_avg[(r, sp)] += F.astype(cp.complex128)
                     F_per[sp] = F
                 for (a, b) in self.cross_pairs:
                     Cross_avg[(r, (a, b))] += cp.real(
-                        F_per[a] * cp.conj(F_per[b])
-                    ).astype(cp.float32)
+                        F_per[a].astype(cp.complex128) * cp.conj(F_per[b].astype(cp.complex128))
+                    )
                 for sp in self.species:
                     F_per[sp] = None
             del p_gpu_full
@@ -445,16 +448,16 @@ class Sq3D:
         # ---- region-averaged diffuse partials ----
         S_diffuse = {}
         for sp in self.species:
-            S = cp.zeros(shape_q, dtype=cp.float32)
+            S = cp.zeros(shape_q, dtype=cp.float64)
             for r in range(n_R):
                 S += FF_avg[(r, sp)] - cp.abs(F_avg[(r, sp)]) ** 2
-            S_diffuse[(sp, sp)] = S / n_R
+            S_diffuse[(sp, sp)] = (S / n_R).astype(cp.float32)
         for (a, b) in self.cross_pairs:
-            S = cp.zeros(shape_q, dtype=cp.float32)
+            S = cp.zeros(shape_q, dtype=cp.float64)
             for r in range(n_R):
                 S += (Cross_avg[(r, (a, b))]
                       - cp.real(F_avg[(r, a)] * cp.conj(F_avg[(r, b)])))
-            S_diffuse[(a, b)] = S / n_R
+            S_diffuse[(a, b)] = (S / n_R).astype(cp.float32)
 
         del F_avg, FF_avg, Cross_avg
 
