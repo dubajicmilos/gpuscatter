@@ -34,7 +34,6 @@ those tools don't currently offer:
 - **2026-05-27**: S(q, ω) folds negative frequencies onto positive for a sqrt(2) per-bin SNR gain, Sq3D moved to float64/complex128 accumulators to protect Bragg-subtraction precision, and the BZ-grid index mapping in dispersion projection was fixed.
 - **2026-05-26**: Sqw and the trajectory loaders gained automatic GPU-VRAM chunking, species grouping, and streaming/binary trajectory I/O.
 - **2026-05-16**: Form-factor tables extended to full periodic-table coverage (65 elements, including the 3d transition metals).
-- **2026-05-10**: Reworked the 3D ΔPDF section with a finer 384³ compute and new isosurface/orthoslice figures.
 - **2026-05-08**: Documented the Sq3D q_Nyquist edge artifact and added the `q_max_clean` property and `Sq3DResult.trim()` to drop the aliased edge band.
 - **2026-05-07**: Initial release (v0.1.0), with neutron weighting added for Sq3D and Sqw.
 
@@ -258,6 +257,25 @@ GTX 1070) feeds the `DispersionProjection` module, which extracts
 2D dispersion sheets along the high-symmetry path:
 
 ![BZ-folded dispersion, 7 partials + total, signed colormap](docs/figures/bz_dispersion_signed.png)
+
+### Neutron coherent + incoherent S(q)
+
+Set `SqwConfig(weighting='neutron', calc_incoherent=True)` and `Sqw` also
+returns the self-correlation **incoherent** S(q, ω) (total only) alongside the
+coherent partials, on the same energy axis and directly additive
+(`result.grand_total`, saved as `S_total`). For a hydrogenous sample the
+incoherent is dominated by H (σ_inc = 80.26 barn) and forms a smooth,
+structureless pedestal, while the coherent carries the diffuse pattern.
+
+Energy-integrated neutron S(q) for MAPbBr3 300 K on the HK1.5 plane (8001
+frames): coherent, incoherent, and their sum, with a cut at K = 2.5.
+
+![Neutron coherent, incoherent, and total energy-integrated S(q)](docs/figures/sqw_neutron_coh_inc_total.png)
+
+The K = 2.5 cut shows the coherent diffuse modulation sitting ~10× below the
+flat incoherent background. This is why neutron studies of hydrogenous
+perovskites deuterate: in a protonated sample the coherent diffuse signal is
+buried under the H-incoherent pedestal.
 
 
 ## What gpuscatter is **not**
