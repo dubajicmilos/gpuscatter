@@ -4,10 +4,21 @@ Algorithm (the same as PSF / dynasor v2, GPU-accelerated):
 
 1. Compute ``F_a(q, t) = sum_{n in a} exp(-i q . r_n(t))`` per species,
    per frame. (PBC-unwrapped to the first frame.)
-2. Subtract the time-mean: ``dF_a = F_a - <F_a>_t`` (exact Bragg subtraction).
-3. Time-FFT along the frame axis: ``F_omega_a = FFT_t[dF_a]``.
+2. (Optional) Subtract the time-mean: ``dF_a = F_a - <F_a>_t`` to remove
+   the elastic Bragg component. Controlled by ``SqwConfig.subtract_bragg``
+   (default False -- Bragg peaks are kept).
+3. Time-FFT along the frame axis: ``F_omega_a = FFT_t[F_a]``.
 4. Form X-ray-weighted partials:
        ``S_ab(q, omega) = (1/N_t) f_a(q) f_b(q) Re[F_omega_a F_omega_b*]``.
+
+Optionally (``calc_incoherent=True``, neutron weighting only) also compute the
+total incoherent S(q, omega) = sum_n w_n |FFT_t exp(iq.r_n)|^2, the
+self-correlation with no inter-atomic interference. The per-atom weight
+w_n = sigma_inc/(4 pi) (fm^2) is on the same scale as the coherent scattering
+length b, so the coherent and incoherent parts are directly additive. For
+hydrogenous samples this is H-dominated (sigma_inc(H) = 80.26 barn) and forms a
+broad, structureless background -- it carries single-particle dynamics, not the
+collective diffuse pattern.
 
 The q-set is fully user-controlled: pass any ``(n_q, 3)`` array of
 q-vectors in 1/A. Two helper functions construct typical q-grids:
@@ -27,7 +38,7 @@ import time
 from typing import Sequence
 import numpy as np
 
-from .form_factors import f_xray, f_neutron
+from .form_factors import f_xray, f_neutron, incoherent_weight_fm2, sigma_incoherent
 from .trajectory import BaseTrajectory, unwrap_positions
 
 
@@ -82,6 +93,10 @@ class SqwConfig:
     atom_chunk: int | str = 'auto'  # 'auto' queries GPU VRAM; or set an int
     sign_convention: str = 'minus'  # 'minus' for exp(-iq.r) (PSF/dynasor), 'plus' for exp(+iq.r)
     species_groups: dict[str, list[str]] | None = None  # e.g. {'A': ['H','C','N'], 'Pb': ['Pb'], 'Br': ['Br']}
+    subtract_bragg: bool = False    # subtract <F(q)>_t before FFT (removes elastic/Bragg component)
+    calc_incoherent: bool = False   # also compute the (total) incoherent S(q,w); neutron weighting only
+    incoherent_atom_chunk: int = 8  # atoms processed per GPU batch in the incoherent loop
+    incoherent_sigma_min: float = 1e-3  # skip atoms with sigma_inc (barn) below this
 
 
 @dataclass
@@ -93,8 +108,18 @@ class SqwResult:
     dt_fs: float
     method: str
     partials: dict[tuple[str, str], np.ndarray] = field(default_factory=dict)
-    total: np.ndarray | None = None
+    total: np.ndarray | None = None          # coherent total (sum of partials)
+    incoherent: np.ndarray | None = None     # total incoherent S(q,w), neutron only
     elapsed_s: float = 0.0
+
+    @property
+    def grand_total(self) -> np.ndarray | None:
+        """Coherent total + incoherent (the full neutron S(q,w))."""
+        if self.total is None:
+            return None
+        if self.incoherent is None:
+            return self.total
+        return self.total + self.incoherent
 
     def save(self, path: str | Path):
         out = {
@@ -105,9 +130,14 @@ class SqwResult:
             'method': self.method,
         }
         if self.total is not None:
-            out['S_total'] = self.total
+            out['S_coh_total'] = self.total
         for (a, b), S in self.partials.items():
             out[f'S_{a}{b}'] = S
+        if self.incoherent is not None:
+            out['S_incoherent'] = self.incoherent
+            out['S_total'] = self.grand_total   # coherent + incoherent
+        elif self.total is not None:
+            out['S_total'] = self.total
         np.savez(Path(path), **out)
 
 
@@ -301,6 +331,34 @@ class Sqw:
         else:
             raise ValueError(f'Unknown weighting: {cfg.weighting!r}')
 
+        # ---- incoherent setup (neutron only) ----
+        calc_inc = cfg.calc_incoherent
+        if calc_inc and cfg.weighting != 'neutron':
+            raise ValueError(
+                'calc_incoherent=True requires neutron weighting '
+                f'(got {cfg.weighting!r}). Incoherent scattering here is the '
+                'neutron self-correlation; x-ray incoherent (Compton) is a '
+                'different process and is not implemented.'
+            )
+        if calc_inc:
+            all_species = np.asarray(traj.species)
+            inc_w_per_atom = np.zeros(all_species.size, dtype=np.float32)
+            for sp in np.unique(all_species):
+                if sigma_incoherent(sp) >= cfg.incoherent_sigma_min:
+                    inc_w_per_atom[all_species == sp] = incoherent_weight_fm2(sp)
+            inc_atom_idx = np.where(inc_w_per_atom > 0.0)[0]
+            inc_w_keep = inc_w_per_atom[inc_atom_idx]
+            # host store of unwrapped positions for the kept atoms, all frames
+            inc_pos_host = np.empty((NF, inc_atom_idx.size, 3), dtype=np.float32)
+            if verbose:
+                kept_by_sp = {sp: int((all_species[inc_atom_idx] == sp).sum())
+                              for sp in np.unique(all_species[inc_atom_idx])}
+                store_gb = inc_pos_host.nbytes / 1e9
+                print(f'[gpuscatter.Sqw] incoherent: {inc_atom_idx.size} atoms '
+                      f'(sigma_inc >= {cfg.incoherent_sigma_min} barn) {kept_by_sp}')
+                print(f'[gpuscatter.Sqw] incoherent position store: '
+                      f'{store_gb:.2f} GB (host)')
+
         # ---- F(q, t) GPU storage (per group or per element) ----
         F = {sp: cp.zeros((n_q, NF), dtype=cp.complex64)
              for sp in self.species}
@@ -314,6 +372,9 @@ class Sqw:
         t0 = time.time()
         for global_idx, p in traj.iter_frames():
             p_unwrapped = unwrap_positions(p, traj.ref_positions, traj.L_box)
+
+            if calc_inc:
+                inc_pos_host[global_idx] = p_unwrapped[inc_atom_idx]
 
             if self._grouped:
                 for grp_name, elems in self._groups.items():
@@ -351,9 +412,10 @@ class Sqw:
         if verbose:
             print(f'[gpuscatter.Sqw] amplitudes: {loop_t:.0f}s')
 
-        # ---- exact Bragg subtraction ----
-        for sp in self.species:
-            F[sp] -= cp.mean(F[sp], axis=1, keepdims=True)
+        # ---- optional Bragg subtraction ----
+        if cfg.subtract_bragg:
+            for sp in self.species:
+                F[sp] -= cp.mean(F[sp], axis=1, keepdims=True)
 
         # ---- time-FFT (cuFFT batched 1D) ----
         t_fft = time.time()
@@ -407,9 +469,48 @@ class Sqw:
         for S in partials.values():
             total += S
 
+        # ---- incoherent S(q,w): sum_n w_n |FFT_t exp(iq.r_n)|^2 (no cross terms) ----
+        incoherent = None
+        if calc_inc and inc_atom_idx.size > 0:
+            del F_omega
+            cp.get_default_memory_pool().free_all_blocks()
+            t_inc = time.time()
+            s_sign = -1.0 if cfg.sign_convention == 'minus' else 1.0
+            A_chunk = max(1, int(cfg.incoherent_atom_chunk))
+            n_keep = inc_atom_idx.size
+            w_gpu = cp.asarray(inc_w_keep)               # (n_keep,) fm^2
+            S_inc_full = cp.zeros((n_q, NF), dtype=cp.float32)
+            for a0 in range(0, n_keep, A_chunk):
+                a1 = min(a0 + A_chunk, n_keep)
+                A_n = a1 - a0
+                r = cp.asarray(inc_pos_host[:, a0:a1, :])          # (NF, A, 3)
+                phase = (qv_gpu @ r.reshape(NF * A_n, 3).T)        # (n_q, NF*A)
+                phase = phase.reshape(n_q, NF, A_n)                # (n_q, NF, A)
+                e = cp.empty((n_q, NF, A_n), dtype=cp.complex64)
+                e.real = cp.cos(phase)
+                e.imag = s_sign * cp.sin(phase)
+                e_w = cp.fft.fft(e, axis=1)                        # FFT over time
+                Si = cp.abs(e_w) ** 2                              # (n_q, NF, A)
+                Si *= w_gpu[a0:a1][None, None, :]
+                S_inc_full += Si.sum(axis=2)
+                del r, phase, e, e_w, Si
+                if verbose and (a0 // A_chunk) % 100 == 0:
+                    cp.cuda.runtime.deviceSynchronize()
+                    print(f'[gpuscatter.Sqw]   incoherent atoms {a1}/{n_keep}',
+                          flush=True)
+            S_inc_full /= NF
+            incoherent = cp.asnumpy(_fold(S_inc_full)).astype(np.float32)
+            del S_inc_full, w_gpu
+            cp.get_default_memory_pool().free_all_blocks()
+            if verbose:
+                print(f'[gpuscatter.Sqw] incoherent ({n_keep} atoms): '
+                      f'{time.time() - t_inc:.0f}s')
+
+        bragg_str = 'Bragg subtracted' if cfg.subtract_bragg else 'Bragg included'
+        inc_str = ', + incoherent (total)' if incoherent is not None else ''
         method = (
             f'GPU direct atomic Fourier sum (CuPy), '
-            f'{cfg.weighting} weighting, exact Bragg subtraction, '
+            f'{cfg.weighting} weighting, {bragg_str}{inc_str}, '
             f'sign exp({cfg.sign_convention} i q.r)'
         )
 
@@ -419,5 +520,6 @@ class Sqw:
             n_frames=NF, dt_fs=cfg.dt_fs,
             method=method,
             partials=partials, total=total,
+            incoherent=incoherent,
             elapsed_s=loop_t,
         )
