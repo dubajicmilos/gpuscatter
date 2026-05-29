@@ -142,3 +142,46 @@ def f_neutron(species: str) -> float:
     if species not in B_NEUTRON:
         raise KeyError(f'No neutron length for {species!r}.')
     return B_NEUTRON[species]
+
+
+# Neutron bound incoherent scattering cross-sections, in barn (1 barn = 100 fm^2).
+# NIST values (https://www.ncnr.nist.gov/resources/n-lengths/). 'D' is deuterium.
+# H is the headline: 80.26 barn dwarfs everything else, so for hydrogenous
+# samples (MA, FA organics) the neutron incoherent signal is H-dominated.
+SIGMA_INC_BARN: dict[str, float] = {
+    'H':  80.26,  'D':   2.05,   'He':  0.00,  'Li':  0.92,  'Be':  0.0018,
+    'B':   1.70,  'C':   0.001,  'N':   0.50,  'O':   0.0008, 'F':   0.0008,
+    'Na':  1.62,  'Mg':  0.08,   'Al':  0.0082,'Si':  0.004,  'P':   0.005,
+    'S':   0.007, 'Cl':  5.3,    'K':   0.27,  'Ca':  0.05,   'Ti':  2.87,
+    'V':   5.08,  'Cr':  1.83,   'Mn':  0.40,  'Fe':  0.40,   'Ni':  5.2,
+    'Cu':  0.55,  'Zn':  0.077,  'Br':  0.10,  'Rb':  0.5,    'Sr':  0.06,
+    'Zr':  0.02,  'Nb':  0.0024, 'Mo':  0.04,  'Ag':  0.58,   'Cd':  3.46,
+    'In':  0.54,  'Sn':  0.022,  'Sb':  0.007, 'I':   0.31,   'Cs':  0.21,
+    'Ba':  0.15,  'Pb':  0.003,  'Bi':  0.0084,
+}
+
+# 1 barn = 100 fm^2; incoherent "scattering length squared" b_inc^2 = sigma_inc/(4 pi).
+# This factor puts the per-atom incoherent weight in fm^2, consistent with the
+# coherent scattering length b (fm) so S_coh and S_inc are directly additive.
+_BARN_TO_FM2 = 100.0
+_INC_WEIGHT_PREFACTOR = _BARN_TO_FM2 / (4.0 * np.pi)
+
+
+def sigma_incoherent(species: str) -> float:
+    """Neutron bound incoherent cross-section, in barn (q-independent)."""
+    if species not in SIGMA_INC_BARN:
+        raise KeyError(
+            f'No incoherent cross-section for {species!r}. '
+            f'Add it to SIGMA_INC_BARN in form_factors.py.'
+        )
+    return SIGMA_INC_BARN[species]
+
+
+def incoherent_weight_fm2(species: str) -> float:
+    """Per-atom incoherent weight b_inc^2 = sigma_inc/(4 pi), in fm^2.
+
+    Consistent units with the coherent scattering length b (fm), so that
+    S_inc = sum_n w_n |FFT_t exp(iq.r_n)|^2 is directly additive to the
+    coherent S(q,w) (which is built from b in fm).
+    """
+    return sigma_incoherent(species) * _INC_WEIGHT_PREFACTOR

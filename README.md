@@ -28,6 +28,16 @@ those tools don't currently offer:
    cell) via direct atomic Fourier sum, and any user path is then
    taken as a 2D slice through the resulting 4D cube.
 
+## Recent updates
+
+- **2026-05-29**: Neutron *incoherent* S(q, ω) (`SqwConfig(calc_incoherent=True)`, total only, neutron weighting), plus an optional `subtract_bragg` switch that now defaults to off so total scattering including Bragg is the default.
+- **2026-05-27**: S(q, ω) folds negative frequencies onto positive for a sqrt(2) per-bin SNR gain, Sq3D moved to float64/complex128 accumulators to protect Bragg-subtraction precision, and the BZ-grid index mapping in dispersion projection was fixed.
+- **2026-05-26**: Sqw and the trajectory loaders gained automatic GPU-VRAM chunking, species grouping, and streaming/binary trajectory I/O.
+- **2026-05-16**: Form-factor tables extended to full periodic-table coverage (65 elements, including the 3d transition metals).
+- **2026-05-10**: Reworked the 3D ΔPDF section with a finer 384³ compute and new isosurface/orthoslice figures.
+- **2026-05-08**: Documented the Sq3D q_Nyquist edge artifact and added the `q_max_clean` property and `Sq3DResult.trim()` to drop the aliased edge band.
+- **2026-05-07**: Initial release (v0.1.0), with neutron weighting added for Sq3D and Sqw.
+
 ## Highlights
 
 | Feature | Method | Wall time on GTX 1070 (5001 frames) |
@@ -95,6 +105,8 @@ pdf = compute_delta_pdf(sq)
 pdf.save('delta_pdf_600K.npz')
 
 # 3) Dynamic S(q, omega) on the HK1.5 plane (20 min)
+#    subtract_bragg=True removes elastic Bragg peaks via <F(q)>_t subtraction;
+#    default is False (total scattering including Bragg).
 h, q_vecs, _ = make_qgrid_HK_plane(L_value=1.5, a_cub=a_cub)
 sqw = Sqw(traj, SqwConfig(q_vecs=q_vecs, dt_fs=200.0)).run()
 sqw.save('sqw_HK15_600K.npz')
