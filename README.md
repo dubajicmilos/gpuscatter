@@ -30,6 +30,7 @@ those tools don't currently offer:
 
 ## Recent updates
 
+- **2026-05-30**: Laue-group symmetry averaging (`symmetrize_volume`, plus `expand_rfft_L` and `get_symmetry_operations`) for the seven signed-permutation Laue groups (`-1, 2/m, mmm, 4/m, 4/mmm, m-3, m-3m`). Orbit-averaging a 3D S(q) cube on its own q-grid folds the N_ops crystallographically equivalent copies to cut per-voxel `<|F|²>` noise by up to √N_ops, with no interpolation (each op is a signed permutation of `(h, k, l)`).
 - **2026-05-29**: Neutron *incoherent* S(q, ω) (`SqwConfig(calc_incoherent=True)`, total only, neutron weighting), plus an optional `subtract_bragg` switch that now defaults to off so total scattering including Bragg is the default.
 - **2026-05-27**: S(q, ω) folds negative frequencies onto positive for a sqrt(2) per-bin SNR gain, Sq3D moved to float64/complex128 accumulators to protect Bragg-subtraction precision, and the BZ-grid index mapping in dispersion projection was fixed.
 - **2026-05-26**: Sqw and the trajectory loaders gained automatic GPU-VRAM chunking, species grouping, and streaming/binary trajectory I/O.
