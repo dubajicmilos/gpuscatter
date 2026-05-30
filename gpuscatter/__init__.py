@@ -30,6 +30,9 @@ from .dispersion import (
     DispersionProjection, project_dispersion,
     HIGH_SYMMETRY_POINTS_CUBIC, make_path_indices,
 )
+from .symmetry import (
+    symmetrize_volume, expand_rfft_L, get_symmetry_operations,
+)
 
 __version__ = '0.1.0'
 
@@ -45,5 +48,6 @@ __all__ = [
     'compute_delta_pdf', 'DeltaPDFResult',
     'DispersionProjection', 'project_dispersion',
     'HIGH_SYMMETRY_POINTS_CUBIC', 'make_path_indices',
+    'symmetrize_volume', 'expand_rfft_L', 'get_symmetry_operations',
     '__version__',
 ]
