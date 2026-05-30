@@ -42,12 +42,50 @@
 * `Sq3D.run` verbose output now prints `q_max_clean` and points users
   at `result.trim()`.
 
+### Symmetry
+
+* **Laue-group orbit averaging** of 3D reciprocal-space volumes, ported
+  from rspace3d. `symmetrize_volume(h_arr, k_arr, L_arr, intensity,
+  laue_group)` gathers, for every voxel, the full set of
+  symmetry-equivalent positions (the *orbit* `{S(R q)}`) and writes
+  their mean. Supports the seven signed-permutation Laue groups
+  (`-1, 2/m, mmm, 4/m, 4/mmm, m-3, m-3m`) — every cubic / tetragonal /
+  orthorhombic perovskite phase; trigonal and hexagonal are not
+  included. Exposed at top level alongside `get_symmetry_operations`
+  and `expand_rfft_L`.
+* **Why it is useful:** folding the `N_ops` crystallographically
+  equivalent copies of a `<|F|^2>`-type diffuse map cuts the per-voxel
+  statistical noise by up to `sqrt(N)` (e.g. up to `sqrt(8)` for
+  `4/mmm` on an HKx plane, where the L-flipped orbit members are exact
+  Friedel duplicates of the in-plane ones) *without changing the
+  q-grid*. This is signal-to-noise that cannot be recovered by
+  computing on a finer grid, which leaves per-pixel noise intact. On an
+  8001-frame MAPbBr3 X-ray cube the per-voxel scatter drops from ~2 %
+  to ~1 % and individual noise spikes collapse onto their orbit
+  consensus, while the diffuse structure is preserved.
+* **Exact on the grid, no interpolation:** each Laue operation is a
+  signed permutation of `(h, k, l)`, so it maps grid nodes onto grid
+  nodes exactly, provided the grid spans both `+q` and `-q` for every
+  axis the group flips.
+* `expand_rfft_L(h_arr, k_arr, L_arr, vol)` Friedel-expands a `Sq3D`
+  rfft half-spectrum (`L >= 0`) into the full symmetric `+-L` volume
+  that the L-flipping operations require, via `S(H,K,-L)=S(-H,-K,L)`.
+  The in-plane axes must be symmetric about 0 (trim to `|q| <= q_max`
+  first).
+* Optional per-orbit MAD outlier rejection (`sigma=`) for
+  measurement-style data; the default `sigma=None` does a pure orbit
+  mean, appropriate for computed S(q).
+
 ### Tests
 
 * `tests/test_sq3d_config.py` covers the new property, the `n_total`
   field, and 9 cases for `trim()` (default vs custom q_max, value
   preservation, shape consistency, metadata propagation, error paths,
   idempotence). No GPU required.
+* `tests/test_symmetry.py` — 7 tests for Laue group orders and
+  orthogonality, the synthetic `mmm` orbit-mean hand check, the Friedel
+  `expand_rfft_L` round-trip, and `4/mmm` idempotence + 4-fold/L-mirror
+  invariance. No GPU required.
 
 ## 0.1.0 — 2026-05-07
 
