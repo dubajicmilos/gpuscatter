@@ -89,7 +89,8 @@ files = sorted(Path('600K/').glob('nptraj*.npz'))
 traj = NpzTrajectory(files)              # 5001 frames, 69 120 atoms
 a_cub = traj.L_box / 24
 
-# 1) Full 3D static S(q) cube (1.7 min on GTX 1070, all L-planes at once)
+# 1) Full 3D static S(q) cube, all L-planes at once (~14 min on a GTX 1070
+#    with the 8 sub-regions below; 1.7 min for the full box alone)
 # n_voxels_per_cell=8 -> q_Nyq = 4 r.l.u.; trust signal up to
 # sq.q_max_clean ~ 3.4 r.l.u. -- see "q_Nyquist edge artifact" below.
 # sub_regions=8, sub_region_cells=8 averages 8 random 8^3-cell sub-cubes

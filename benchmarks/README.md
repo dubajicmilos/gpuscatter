@@ -25,9 +25,10 @@ in one shot rather than one plane at a time.
 | Direct atomic sum, numpy, all 97 L planes (extrapolated) | **65 days** | full 3D cube |
 | **gpuscatter, GPU rFFT, full 3D cube** | **1.7 min** | **full 3D cube** |
 
-**Speedup vs same-grid CPU direct sum: ~75× (vs numba JIT) to ~500× (vs single-thread numpy)**.
-**Speedup if a full 3D cube is needed: ~50 000×**, because gpuscatter
-gets all 97 L planes from the same compute.
+The GPU run returns all 97 L planes in 1.7 min, less than the 21 min the
+numba direct sum needs for one plane. Extrapolated to all 97 planes, the
+direct sum would take ~34 h with numba (97 × 21 min) and ~65 days with
+single-thread numpy, about 1200× and 55 000× the GPU time.
 
 The headline 1.7 min number is for the full 5001-frame, 192³ q-cube on
 a GTX 1070. The same calculation on an A100 is roughly 30 s (extrapolating
@@ -120,9 +121,10 @@ Two effects compound:
 
 2. **Density binning + 3D rFFT vs direct sum** (only for static S(q)).
    The rFFT scales as `N³ log N`, the direct sum as `n_atoms × n_q`.
-   For the 192³ q-grid + 70 000 atoms, the FFT is ~10× cheaper *per
-   q-point* than the direct sum on the same hardware, in addition to
-   the GPU speedup. This is why the static cube is so fast.
+   For the 192³ q-grid and 70 000 atoms, the FFT route needs ~4500×
+   fewer operations than the direct sum over the full cube (~32× fewer
+   for a single L-plane; see docs/algorithm.md), in addition to the GPU
+   speedup. This is why the static cube is so fast.
 
    The dynamic `S(q, ω)` does not benefit from this, because the
    density-binning approach requires storing `F(q, t)` for all

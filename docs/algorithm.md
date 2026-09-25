@@ -86,10 +86,9 @@ For our 600 K demo:
 * Direct sum, full cube: 70 000 × 3.6e6 = 2.5e11 ops/frame
 * Density + rFFT: 70 000 × 8 + 192^3 × log_2(192) = 5.6e5 + 5.6e7 = 5.6e7 ops/frame
 
-So the FFT route is ~32× cheaper than direct-sum on the same workload
-(single L-plane), or ~4500× cheaper than direct-sum on the full cube.
-Combined with a ~10–15× GPU speedup over single-CPU numpy, the total
-is ~75× per single-plane workload, or ~50 000× for full-cube workloads.
+So the FFT route needs ~32× fewer operations than the direct sum for a
+single L-plane, and ~4500× fewer for the full cube. The GPU adds its own
+speed-up on top; measured wall times are in benchmarks/README.md.
 
 ## 2. Dynamic S(q, ω) — direct atomic sum + cuFFT
 
