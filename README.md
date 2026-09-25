@@ -35,6 +35,7 @@ currently offer:
 
 ## Recent updates
 
+- 2026-09-25: `Sq3DResult.save_rspace3d()` writes the total or one partial S(q) as an HDF5 volume in the layout of rspace3d volumes, which rspace3d and xrays-on-detector read. It rebuilds the full ±L volume from the L ≥ 0 half-spectrum by Friedel symmetry, so call it on a trimmed result.
 - 2026-05-30: Laue-group symmetry averaging (`symmetrize_volume`, plus `expand_rfft_L` and `get_symmetry_operations`) for the seven signed-permutation Laue groups (`-1, 2/m, mmm, 4/m, 4/mmm, m-3, m-3m`). Orbit-averaging a 3D S(q) cube on its own q-grid folds together the N_ops crystallographically equivalent copies of each voxel, which cuts the per-voxel `<|F|²>` noise by up to √N_ops. No interpolation is needed, because each operation is a signed permutation of `(h, k, l)`.
 - 2026-05-29: Neutron incoherent S(q, ω) (`SqwConfig(calc_incoherent=True)`; total only; neutron weighting only), plus an optional `subtract_bragg` switch that now defaults to off, so the default output is total scattering including Bragg peaks.
 - 2026-05-27: S(q, ω) now folds negative frequencies onto positive ones, for a sqrt(2) gain in signal-to-noise ratio per frequency bin. Sq3D moved to float64/complex128 accumulators to protect the precision of the Bragg subtraction, and the BZ-grid index mapping in the dispersion projection was fixed.
@@ -199,6 +200,25 @@ Recommended use:
   of one specific plane up to high q, use `Sqw` with
   `make_qgrid_HK_plane` (and integrate over ω if you want the static
   partial).
+
+#### Saving for rspace3d and xrays-on-detector
+
+`Sq3DResult.save_rspace3d()` writes the total or one partial as an HDF5
+volume in the layout of [rspace3d](https://github.com/dubajicmilos/rspace3d)
+volumes, so rspace3d and
+[xrays-on-detector](https://github.com/dubajicmilos/xrays-on-detector)
+read the file directly. It rebuilds the full ±L volume from the L ≥ 0
+half-spectrum by Friedel symmetry, which needs H and K axes symmetric
+about 0, so call it on a trimmed result: `trim()` makes the axes
+symmetric and drops the edge band described above. The cubic cell is
+stored in the file's UB matrix, and the `wavelength` argument only
+scales that matrix; it has no physical meaning for a simulation.
+
+```python
+result = Sq3D(traj, Sq3DConfig(n_cells=24, n_voxels_per_cell=8)).run()
+result.trim().save_rspace3d('sq3d_CsPbI3_600K.h5')
+result.trim().save_rspace3d('sq3d_CsPbI3_600K_CsPb.h5', channel=('Cs', 'Pb'))
+```
 
 
 ### 3D ΔPDF
