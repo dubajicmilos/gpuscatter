@@ -12,9 +12,8 @@ all using the **CsPbI₃ 600 K demo trajectory** (Baldwin et al. 2024,
 | 4 | `04_dynamic_sqw_BZ.py` | Full first-BZ S(q, ω) on 24³ q-grid for phonon dispersion | **11 min** |
 | 5 | `05_dispersion_paths.py` | Project the BZ S(q, ω) along Γ–X–M–R–Γ | < 5 s |
 
-For comparison: the equivalent 1 plane S(q, ω) on a single CPU using
-dynasor v2 takes ~5 hours; the equivalent 3D S(q) cube via direct
-atomic Fourier sum takes ~34 hours. **gpuscatter is 14–75× faster.**
+For comparison, the same one-plane S(q, ω) takes ~5 hours with
+single-CPU dynasor v2, about 14× the 21 min of example 3.
 
 ## Quick start
 
