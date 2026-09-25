@@ -7,8 +7,10 @@ gpuscatter is a Python package that, like
 [PSF](https://github.com/tyst3273/pynamic-structure-factor)
 and [dynasor v2](https://gitlab.com/materials-modeling/dynasor), computes
 scattering functions from molecular-dynamics (MD) trajectories. It is
-built on CuPy + cuFFT, which gives an ~50–500× speedup over single-CPU
-baselines, and it adds three capabilities that those tools don't
+built on CuPy + cuFFT. For S(q, ω) on the HK plane at L = 1.5 (69 120
+atoms, 161 × 161 q-points, 5001 frames), the wall time is 20 min on a
+GTX 1070 vs ~5 h with single-CPU dynasor v2, a factor of ~15. It
+provides three capabilities, the first two of which those tools don't
 currently offer:
 
 1. Full 3D S(q) cube: every reciprocal-space plane from one
@@ -53,7 +55,7 @@ currently offer:
 
 For comparison, a direct atomic Fourier sum on a single CPU, the method
 used by `dynasor v2` and `PSF`, takes ~5 hours for S(q, ω) on the HK
-plane and ~34 hours for the full 3D S(q) cube.
+plane.
 
 ## Install
 
@@ -168,10 +170,6 @@ Eight L-planes from the same 1.7-min run:
 orange = positive, blue inner surface = negative lobes of the cross partials):
 
 ![Rotating 3D partial S(q) isosurfaces](docs/figures/sq3d_isosurfaces_rotation.gif)
-
-For comparison, computing the same eight L-planes by direct atomic
-Fourier sum (numba JIT, one L plane at a time) on the same hardware
-would take ~3 h, and the full 97-plane cube would take ~34 h.
 
 #### Caveat: q_Nyquist edge artifact
 
@@ -314,10 +312,9 @@ The main difference from these tools is how `gpuscatter` computes the
 3D static S(q): by density-binning + 3D rFFT. This changes the
 asymptotic complexity from `O(n_atoms × n_q)` for the direct sum used by
 the other tools in this table to `O(n_atoms + N³ log N)` for binning +
-FFT. For the 600 K demo (~70 000 atoms × 3.6 M q-points), the asymptotic
-ratio is ~10×. Combined with the ~10× GPU speedup, the total is ~75× for
-a single-plane calculation, and ~50 000× when you need the full 3D cube
-instead of a single plane.
+FFT on an N³ grid. In the 600 K demo, `gpuscatter` computes the full
+192³ cube (all 97 unique L-planes, 5001 frames) in 1.7 min on a
+GTX 1070.
 
 ## Citing
 
