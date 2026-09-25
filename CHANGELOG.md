@@ -76,6 +76,27 @@
   measurement-style data; the default `sigma=None` does a pure orbit
   mean, appropriate for computed S(q).
 
+### I/O
+
+* `Sq3DResult.save_rspace3d(path, channel='total', *, full_l=True,
+  wavelength=1.0, compression='gzip', compression_level=4)` writes the
+  total or one partial as an HDF5 volume in the layout of rspace3d's
+  `save_volume_h5`, which rspace3d's `load_volume_h5` and
+  xrays-on-detector's `SqVolume` read: `data` (float32, axis order
+  H, K, L), float64 axes `H`, `K`, `L`, `UB = wavelength * I / a_cub`,
+  and the attributes `wavelength`, `grid_kind = 'hkl_regular'`,
+  `plane_type = 'HK'`, the cubic cell and the provenance keys
+  `gpuscatter_channel`, `gpuscatter_method` and `gpuscatter_n_frames`.
+  The wavelength only scales UB and has no physical meaning for a
+  simulation.
+* With `full_l=True` (the default) it rebuilds the full `+-L` volume
+  from the rfft half-spectrum with `expand_rfft_L`, which needs H and K
+  axes symmetric about 0, so call it on `result.trim()`.
+* The axes are written in float64 as exact multiples of `1 / n_cells`.
+  A plain float64 cast of Sq3D's float32 axes makes the step vary by
+  more than 1e-6 (relative) for `n_cells = 24`, and xrays-on-detector
+  rejects such an axis as non-uniform.
+
 ### Tests
 
 * `tests/test_sq3d_config.py` covers the new property, the `n_total`
@@ -86,6 +107,10 @@
   orthogonality, the synthetic `mmm` orbit-mean hand check, the Friedel
   `expand_rfft_L` round-trip, and `4/mmm` idempotence + 4-fold/L-mirror
   invariance. No GPU required.
+* `tests/test_rspace3d_io.py`: 4 tests for `save_rspace3d`, covering
+  every dataset and attribute with its dtype and value, the
+  Friedel-expanded full-L volume, channel selection and the error
+  paths, and the exact float64 axes. No GPU required; needs h5py.
 
 ## 0.1.0 — 2026-05-07
 

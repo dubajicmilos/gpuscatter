@@ -34,6 +34,7 @@ from typing import Sequence
 import numpy as np
 
 from .form_factors import f_xray, f_neutron
+from .symmetry import expand_rfft_L
 from .trajectory import BaseTrajectory
 
 
@@ -238,6 +239,170 @@ class Sq3DResult:
         for (a, b), S in self.partials.items():
             out[f'S_{a}{b}'] = S
         np.savez(Path(path), **out)
+
+    def save_rspace3d(self, path, channel='total', *, full_l=True, wavelength=1.0,
+                      compression='gzip', compression_level=4):
+        """Save one channel as an HDF5 volume in the rspace3d layout.
+
+        The file has the layout that rspace3d's ``save_volume_h5`` writes,
+        which rspace3d's ``load_volume_h5`` and xrays-on-detector's
+        ``SqVolume`` read. At the root of the file:
+
+        * ``data``: float32, shape ``(nH, nK, nL)``, axis order H, K, L;
+        * ``H``, ``K``, ``L``: float64 axes in r.l.u. of the cubic cell
+          ``a_cub``;
+        * ``UB``: float64 ``(3, 3)``, ``wavelength * np.eye(3) / a_cub``;
+        * attributes ``wavelength``, ``grid_kind = 'hkl_regular'``,
+          ``plane_type = 'HK'``, ``cell_a``, ``cell_b``, ``cell_c``
+          (= ``a_cub``), ``cell_alpha``, ``cell_beta``, ``cell_gamma``
+          (= 90), and the provenance keys ``gpuscatter_channel``,
+          ``gpuscatter_method`` and ``gpuscatter_n_frames``.
+
+        Detector attributes (``bin_xy``, ``bin_z``, ``M_inv``,
+        ``source_folder``, ``laue_group``) are not written.
+
+        Parameters
+        ----------
+        path : str or Path
+            Output file. An existing file is overwritten.
+        channel : 'total' or (str, str), default 'total'
+            ``'total'`` writes :attr:`total`; a species pair such as
+            ``('Cs', 'Pb')`` writes ``partials[('Cs', 'Pb')]``.
+        full_l : bool, default True
+            If True, write the full ``+-L`` volume, rebuilt from the
+            ``L >= 0`` rfft half-spectrum by Friedel symmetry
+            (:func:`gpuscatter.symmetry.expand_rfft_L`). That needs H and K
+            axes symmetric about 0, which the untrimmed ``[-N/2, N/2)``
+            grid is not, so call :meth:`trim` first. If False, write the
+            half-spectrum as it is.
+        wavelength : float, default 1.0
+            Has no physical meaning for a simulation. It only scales the
+            stored matrix, ``UB = wavelength * B`` with ``B = I / a_cub``
+            (reciprocal basis in 1/d units, no 2 pi, U the identity), so
+            readers that divide UB by the wavelength, as in the CrysAlisPro
+            convention, recover the cell. The wavelength of a detector
+            projection is set in the reader.
+        compression : str or None, default 'gzip'
+            HDF5 filter for ``data``, ``H``, ``K`` and ``L``; None writes
+            them uncompressed.
+        compression_level : int, default 4
+            Passed to h5py as ``compression_opts``.
+
+        Raises
+        ------
+        ValueError
+            If the channel is missing, if ``full_l`` is True and the H or K
+            axis is not symmetric about 0, or if an axis is not on the
+            ``1 / n_cells`` grid.
+        ImportError
+            If h5py is not installed.
+
+        Notes
+        -----
+        Call it as ``result.trim().save_rspace3d(path)``: :meth:`trim`
+        removes the q_Nyquist edge band and makes the H and K axes
+        symmetric.
+
+        The axes are rebuilt in float64 as exact multiples of the grid step
+        ``1 / n_cells``. Sq3D stores them in float32, and that rounding
+        makes the step look non-uniform to a reader that checks it to 1e-6,
+        as xrays-on-detector does.
+
+        For Laue-group averaging before saving, use
+        :func:`gpuscatter.symmetry.symmetrize_volume`, which replaces each
+        voxel by the mean of the intensities at its symmetry-equivalent
+        positions. Every Laue group contains the inversion, which flips L,
+        so it needs the full ``+-L`` volume from
+        :func:`gpuscatter.symmetry.expand_rfft_L`. The averaged volume keeps
+        ``S(-q) = S(q)``, so its ``L >= 0`` half holds all of it; put that
+        half back and save::
+
+            clean = result.trim()
+            h, k, L, full = expand_rfft_L(clean.h_arr, clean.k_arr,
+                                          clean.L_arr, clean.total)
+            sym = symmetrize_volume(h, k, L, full, 'm-3m')
+            clean.total = sym[:, :, clean.L_arr.size - 1:]
+            clean.save_rspace3d(path)
+
+        Examples
+        --------
+        >>> result = Sq3D(traj, cfg).run()
+        >>> result.trim().save_rspace3d('sq3d_CsPbI3_600K.h5')
+        >>> result.trim().save_rspace3d('sq3d_CsPbI3_600K_CsPb.h5',
+        ...                             channel=('Cs', 'Pb'))
+        """
+        try:
+            import h5py
+        except ImportError as e:
+            raise ImportError(
+                'h5py is needed to write the rspace3d HDF5 format. '
+                'Install it with `pip install h5py`.'
+            ) from e
+
+        if channel == 'total':
+            vol = self.total
+            if vol is None:
+                raise ValueError(
+                    "channel='total' was requested, but this result has no "
+                    "total (total is None)."
+                )
+            label = 'total'
+        else:
+            vol = self.partials.get(channel) if isinstance(channel, tuple) else None
+            if vol is None:
+                raise ValueError(
+                    f"channel {channel!r} is not in this result. Use 'total' "
+                    f"or one of the partial keys {list(self.partials)}."
+                )
+            label = ''.join(channel)
+        vol = np.asarray(vol, dtype=np.float32)
+
+        def _grid_axis(axis, name):
+            # Sq3D axes are i / n_cells r.l.u.; rebuild them exactly in float64.
+            # float32 rounding moves the index i by far less than 1e-3.
+            i_float = np.asarray(axis, dtype=np.float64) * self.n_cells
+            i = np.round(i_float)
+            if np.max(np.abs(i_float - i)) > 1e-3:
+                raise ValueError(
+                    f'The {name} axis is not on the 1/n_cells grid '
+                    f'(n_cells = {self.n_cells}).'
+                )
+            return i / self.n_cells
+
+        h = _grid_axis(self.h_arr, 'H')
+        k = _grid_axis(self.k_arr, 'K')
+        L = _grid_axis(self.L_arr, 'L')
+
+        if full_l:
+            if not (np.allclose(h, -h[::-1]) and np.allclose(k, -k[::-1])):
+                raise ValueError(
+                    'full_l=True needs H and K axes symmetric about 0, but '
+                    'this grid is not (the untrimmed grid runs over '
+                    '[-N/2, N/2)). Call .trim() first, as in '
+                    'result.trim().save_rspace3d(path), or pass full_l=False '
+                    'to write the L >= 0 half-spectrum.'
+                )
+            h, k, L, vol = expand_rfft_L(h, k, L, vol)
+
+        comp = ({'compression': compression,
+                 'compression_opts': compression_level}
+                if compression else {})
+        with h5py.File(Path(path), 'w') as f:
+            f.create_dataset('data', data=vol, **comp)
+            f.create_dataset('H', data=h, **comp)
+            f.create_dataset('K', data=k, **comp)
+            f.create_dataset('L', data=L, **comp)
+            f.create_dataset('UB', data=wavelength * np.eye(3) / self.a_cub)
+            f.attrs['wavelength'] = float(wavelength)
+            f.attrs['grid_kind'] = 'hkl_regular'
+            f.attrs['plane_type'] = 'HK'
+            for key in ('cell_a', 'cell_b', 'cell_c'):
+                f.attrs[key] = float(self.a_cub)
+            for key in ('cell_alpha', 'cell_beta', 'cell_gamma'):
+                f.attrs[key] = 90.0
+            f.attrs['gpuscatter_channel'] = label
+            f.attrs['gpuscatter_method'] = self.method
+            f.attrs['gpuscatter_n_frames'] = int(self.n_frames)
 
 
 class Sq3D:
