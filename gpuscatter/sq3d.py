@@ -23,8 +23,8 @@ Optionally, sub-region averaging suppresses long-vector finite-N Fourier
 ripples by computing per-frame densities on a small subcube of the
 supercell, FFTing each region separately, and averaging.
 
-For the 600 K CsPbI3 demo (5001 frames, full 3D q-cube) it runs in
-1.7 min on a GTX 1070.
+For the 600 K CsPbI3 demo (5001 frames, full 3D q-cube) the full-box
+run takes 1.7 min on a GTX 1070, and the 8-sub-region run ~14 min.
 """
 from __future__ import annotations
 from dataclasses import dataclass, field
